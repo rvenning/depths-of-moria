@@ -44,6 +44,8 @@ export function SettingsScreen() {
         <Section title="Battle">
           <div className="col">
             <div className="row">Default speed {([1, 2, 4] as const).map((n) => <button key={n} className={`btn small ${st.speed === n ? 'primary' : ''}`} onClick={() => set({ speed: n })}>{n}×</button>)}</div>
+            <div className="row wrap">Graphics {([['auto', 'Auto'], ['hd', 'HD-2D lighting'], ['low', 'Plain pixels']] as const).map(([k, label]) => <button key={k} className={`btn small ${st.graphics === k ? 'primary' : ''}`} onClick={() => { try { localStorage.removeItem('dom.fxLow'); } catch { /* private mode */ } set({ graphics: k }); }}>{label}</button>)}</div>
+            <p className="tiny dim">HD-2D adds real-time torch light on the sprites, bloom and a soft depth of field. Auto switches to plain pixels if the battle runs slowly.</p>
             <label className="check"><input type="checkbox" checked={st.showLog} onChange={(e) => set({ showLog: e.target.checked })} /> Show the battle log</label>
             <label className="check"><input type="checkbox" checked={st.autoDelve} onChange={(e) => set({ autoDelve: e.target.checked })} /> Auto-delve: continue to the next floor automatically</label>
           </div>

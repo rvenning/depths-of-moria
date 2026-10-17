@@ -3,7 +3,7 @@
 // Pure computation: no DOM, so the unit tests and Node tools can use it too.
 
 export type RGB = [number, number, number];
-export interface PixImg { w: number; h: number; rgba: Uint8ClampedArray }
+export interface PixImg { w: number; h: number; rgba: Uint8ClampedArray; /** tangent-space normal map (rgb), alpha follows the sprite */ normal?: Uint8ClampedArray }
 
 const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? b : v);
 export const hexRGB = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -66,15 +66,20 @@ export interface DrawOpts {
 
 export class Sprite {
   w: number; h: number; mat: Int16Array; p: Float32Array; part: Int32Array; grp: Int32Array; dir: Int32Array; noline: Uint8Array;
+  /** accumulated surface height, used to build the normal map for dynamic lighting */
+  height: Float32Array;
   n = 0; ox = 0; oy = 0; grps: Record<string, number> = {};
+  /** design-space to pixel scale for every mask and dot (lets a 256-unit drawing be rendered at any sprite size) */
+  k = 1;
   constructor(w: number, h: number) {
     this.w = w; this.h = h; const n = w * h;
     this.mat = new Int16Array(n).fill(-1); this.p = new Float32Array(n); this.part = new Int32Array(n).fill(-1);
     this.grp = new Int32Array(n).fill(-1); this.dir = new Int32Array(n).fill(-1); this.noline = new Uint8Array(n);
+    this.height = new Float32Array(n);
   }
   at(ox: number, oy: number): this { this.ox = ox; this.oy = oy; return this; }
   mPoly(pts: [number, number][]): Uint8Array {
-    const { w, h } = this, m = new Uint8Array(w * h), P = pts.map(([x, y]) => [x + this.ox, y + this.oy] as [number, number]);
+    const { w, h } = this, m = new Uint8Array(w * h), P = pts.map(([x, y]) => [x * this.k + this.ox, y * this.k + this.oy] as [number, number]);
     let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
     for (const [x, y] of P) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(h - 1, Math.ceil(y1)); y++) for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(w - 1, Math.ceil(x1)); x++) {
@@ -84,16 +89,16 @@ export class Sprite {
     }
     return m;
   }
-  mEll(cx0: number, cy0: number, rx: number, ry: number): Uint8Array {
-    const { w, h } = this, m = new Uint8Array(w * h), cx = cx0 + this.ox, cy = cy0 + this.oy;
+  mEll(cx0: number, cy0: number, rx0: number, ry0: number): Uint8Array {
+    const { w, h } = this, m = new Uint8Array(w * h), cx = cx0 * this.k + this.ox, cy = cy0 * this.k + this.oy, rx = rx0 * this.k, ry = ry0 * this.k;
     for (let y = Math.max(0, Math.floor(cy - ry)); y <= Math.min(h - 1, Math.ceil(cy + ry)); y++) for (let x = Math.max(0, Math.floor(cx - rx)); x <= Math.min(w - 1, Math.ceil(cx + rx)); x++) { const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry; if (dx * dx + dy * dy <= 1) m[y * w + x] = 1; }
     return m;
   }
   mRect(x: number, y: number, rw: number, rh: number): Uint8Array { return this.mPoly([[x, y], [x + rw, y], [x + rw, y + rh], [x, y + rh]]); }
   mLine(pts: [number, number][], wd: number, wd2?: number): Uint8Array {
-    const { w, h } = this, m = new Uint8Array(w * h), P = pts.map(([x, y]) => [x + this.ox, y + this.oy] as [number, number]);
+    const { w, h } = this, m = new Uint8Array(w * h), P = pts.map(([x, y]) => [x * this.k + this.ox, y * this.k + this.oy] as [number, number]);
     for (let s = 0; s < P.length - 1; s++) {
-      const [ax, ay] = P[s], [bx, by] = P[s + 1], r0 = wd / 2, r1 = (wd2 ?? wd) / 2, pad = Math.max(r0, r1) + 1;
+      const [ax, ay] = P[s], [bx, by] = P[s + 1], r0 = Math.max(0.6, (wd * this.k) / 2), r1 = Math.max(0.6, ((wd2 ?? wd) * this.k) / 2), pad = Math.max(r0, r1) + 1;
       const xa = Math.max(0, Math.floor(Math.min(ax, bx) - pad)), xb = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + pad)), ya = Math.max(0, Math.floor(Math.min(ay, by) - pad)), yb = Math.min(h - 1, Math.ceil(Math.max(ay, by) + pad));
       const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
       for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
@@ -136,6 +141,7 @@ export class Sprite {
       if (o.fold) { const f = o.fold, a = f.angle ?? 0; p += f.amp * Math.sin(((x * Math.cos(a) + y * Math.sin(a)) / f.period) * Math.PI * 2 + (f.phase ?? 0)); }
       if (o.tex) p += o.tex * (hash2(x, y, pid) - 0.5);
       this.mat[i] = id; this.p[i] = clamp(p, 0, 4); this.part[i] = pid; this.grp[i] = g; this.dir[i] = -1; this.noline[i] = o.noLine ? 1 : 0;
+      this.height[i] = o.flat ? 0.6 + pid * 0.02 : hh[i] * 0.8 + 0.4 + pid * 0.02;
     }
     return this;
   }
@@ -144,7 +150,7 @@ export class Sprite {
   rect(x: number, y: number, rw: number, rh: number, mat: string, o?: DrawOpts): this { return this.draw(this.mRect(x, y, rw, rh), mat, o); }
   line(pts: [number, number][], wd: number, mat: string, o?: DrawOpts, wd2?: number): this { return this.draw(this.mLine(pts, wd, wd2), mat, o); }
   dot(x0: number, y0: number, hex: string, o: { line?: boolean } = {}): this {
-    const x = Math.round(x0 + this.ox), y = Math.round(y0 + this.oy); if (x < 0 || y < 0 || x >= this.w || y >= this.h) return this;
+    const x = Math.round(x0 * this.k + this.ox), y = Math.round(y0 * this.k + this.oy); if (x < 0 || y < 0 || x >= this.w || y >= this.h) return this;
     const c = hexRGB(hex), i = y * this.w + x; this.dir[i] = (c[0] << 16) | (c[1] << 8) | c[2]; this.noline[i] = o.line ? 0 : 1;
     if (!o.line) { this.mat[i] = -1; this.part[i] = this.n; }
     return this;
@@ -177,13 +183,41 @@ export class Sprite {
       else if (outl[i]) c = outl[i];
       if (c) { out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255; }
     }
-    return { w, h, rgba: out };
+    // normal map from the height field (light comes from the upper left, so y points up the sprite)
+    const normal = new Uint8ClampedArray(w * h * 4);
+    const Hh = (x: number, y: number): number => (x < 0 || y < 0 || x >= w || y >= h ? 0 : this.height[y * w + x]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, o = i * 4;
+      if (!out[o + 3]) { normal[o] = 128; normal[o + 1] = 128; normal[o + 2] = 255; continue; }
+      let nx = -(Hh(x + 1, y) - Hh(x - 1, y)) * 0.9, ny = (Hh(x, y + 1) - Hh(x, y - 1)) * 0.9; const nz = 1, l = Math.hypot(nx, ny, nz);
+      nx /= l; ny /= l;
+      normal[o] = Math.round((nx * 0.5 + 0.5) * 255); normal[o + 1] = Math.round((ny * 0.5 + 0.5) * 255); normal[o + 2] = Math.round(((nz / l) * 0.5 + 0.5) * 255); normal[o + 3] = 255;
+    }
+    return { w, h, rgba: out, normal };
   }
 }
 
-export function toCanvas(img: PixImg): HTMLCanvasElement {
+/** a tangent-space normal map from an image's luminance (for painted art that has no height data) */
+export function normalFromImageData(src: Uint8ClampedArray, w: number, h: number, strength = 1.6): Uint8ClampedArray {
+  const lum = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) lum[i] = src[i * 4 + 3] ? (0.3 * src[i * 4] + 0.59 * src[i * 4 + 1] + 0.11 * src[i * 4 + 2]) / 255 : 0;
+  const blur = new Float32Array(w * h);
+  const L = (x: number, y: number): number => lum[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) blur[y * w + x] = (L(x, y) * 4 + L(x - 1, y) + L(x + 1, y) + L(x, y - 1) + L(x, y + 1)) / 8;
+  const B = (x: number, y: number): number => blur[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = (y * w + x) * 4;
+    let nx = -(B(x + 1, y) - B(x - 1, y)) * strength * 2, ny = (B(x, y + 1) - B(x, y - 1)) * strength * 2; const l = Math.hypot(nx, ny, 1);
+    nx /= l; ny /= l;
+    out[o] = Math.round((nx * 0.5 + 0.5) * 255); out[o + 1] = Math.round((ny * 0.5 + 0.5) * 255); out[o + 2] = Math.round(((1 / l) * 0.5 + 0.5) * 255); out[o + 3] = 255;
+  }
+  return out;
+}
+
+export function toCanvas(img: PixImg, data: Uint8ClampedArray = img.rgba): HTMLCanvasElement {
   const cv = document.createElement('canvas'); cv.width = img.w; cv.height = img.h;
   const x = cv.getContext('2d') as CanvasRenderingContext2D;
-  x.putImageData(new ImageData(new Uint8ClampedArray(img.rgba), img.w, img.h), 0, 0);
+  x.putImageData(new ImageData(new Uint8ClampedArray(data), img.w, img.h), 0, 0);
   return cv;
 }

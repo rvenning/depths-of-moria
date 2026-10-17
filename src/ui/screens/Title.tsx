@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PIX, compositeBackground } from '../../art/backgrounds.ts';
-import { HERO_FOOT, HERO_H, HERO_W, paintHero } from '../../art/heroes.ts';
-import type { HeroId } from '../../content/schema.ts';
+import { animateTitle } from '../../art/titleScene.ts';
 import { importSave } from '../../persistence/db.ts';
 import { Icon, Modal } from '../components.tsx';
 import { t, setNaming } from '../names.ts';
@@ -18,14 +16,8 @@ export function TitleScreen() {
 
   useEffect(() => {
     const c = ref.current; if (!c) return;
-    c.width = 960; c.height = 480;
-    const x = c.getContext('2d'); if (!x) return;
-    x.imageSmoothingEnabled = false;
-    x.drawImage(compositeBackground(st.hasSave ? Math.min(10, Math.max(1, st.state.age)) : 1, 'arena', 960, 480), 0, 0);
-    // the company stands at the gate, drawn at the same pixel size as the scenery
-    const company: [HeroId, number, number][] = [['gandalf', 78, 452], ['aragorn', 168, 466], ['legolas', 748, 452], ['gimli', 672, 466], ['frodo', 770, 476]];
-    for (const [id, px, py] of company) x.drawImage(paintHero(id), px, py - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
-  }, [st.hasSave, st.state.age]);
+    return animateTitle(c, st.hasSave ? Math.min(10, Math.max(1, st.state.age)) : 1, st.state.settings.reducedMotion);
+  }, [st.hasSave, st.state.age, st.state.settings.reducedMotion]);
 
   const start = () => { sfx.resume(); sfx.confirm(); store.startNew(); store.mutate((s) => { s.flags.prologue = 0; }, 'now'); };
 

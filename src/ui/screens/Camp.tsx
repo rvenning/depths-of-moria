@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CAMP_H, CAMP_SPOTS, CAMP_W, paintCamp } from '../../art/camp.ts';
+import { CAMP_SPOTS, animateCamp } from '../../art/camp.ts';
 import { CAMP_UPGRADES } from '../../content/camp.ts';
 import { CHAPTER_BY_N } from '../../content/chapters.ts';
 import { HEROES } from '../../content/heroes.ts';
@@ -38,9 +38,8 @@ export function CampScreen() {
 
   useEffect(() => {
     const c = ref.current; if (!c) return;
-    c.width = CAMP_W; c.height = CAMP_H;
-    c.getContext('2d')?.drawImage(paintCamp(s.age, ids), 0, 0);
-  }, [s.age, ids]);
+    return animateCamp(c, s.age, ids, s.settings.reducedMotion);
+  }, [s.age, ids, s.settings.reducedMotion]);
 
   const preview = descentPreview(s);
   const canDescend = preview.canDescend;
@@ -56,7 +55,6 @@ export function CampScreen() {
         <div className="camp">
           <div className="scene">
             <canvas ref={ref} aria-hidden="true" />
-            <div className="fire-glow" style={{ position: 'absolute', left: '50%', top: '86%', width: '34%', height: '34%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(255,150,50,0.35), transparent 70%)', animation: s.settings.reducedMotion ? undefined : 'flicker 1.6s infinite alternate', pointerEvents: 'none' }} />
             {HOT.map((h) => {
               const sp = CAMP_SPOTS[h.id];
               const locked = h.id === 'forge' && maxChapterReached(s) < 3;

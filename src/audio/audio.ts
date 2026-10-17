@@ -5,6 +5,7 @@
  */
 import { CHAPTER_BY_N } from '../content/chapters.ts';
 import type { Settings } from '../core/state.ts';
+import { compose, type Score, type ScoreNote } from './score.ts';
 
 type Mood = 'camp' | 'battle' | 'boss' | 'title';
 
@@ -17,8 +18,6 @@ class AudioEngine {
   private chapter = 1;
   private mood: Mood = 'title';
   private timer: ReturnType<typeof setInterval> | null = null;
-  private nextBeat = 0;
-  private beat = 0;
   private drone: { o: OscillatorNode[]; g: GainNode; f: BiquadFilterNode } | null = null;
   private amb: { src: AudioBufferSourceNode; g: GainNode; f: BiquadFilterNode } | null = null;
   private dripTimer: ReturnType<typeof setTimeout> | null = null;
@@ -70,7 +69,7 @@ class AudioEngine {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.muted ? 0 : this.vol.master, t, 0.03);
-    this.musicBus.gain.setTargetAtTime(this.vol.music * 0.5, t, 0.05);
+    this.musicBus.gain.setTargetAtTime(this.vol.music * 0.75, t, 0.05);
     this.sfxBus.gain.setTargetAtTime(this.vol.sfx * 0.9, t, 0.03);
     this.ambBus.gain.setTargetAtTime(this.vol.ambience * 0.5, t, 0.05);
   }
@@ -83,10 +82,9 @@ class AudioEngine {
     if (!changed) return;
     this.startDrone();
     this.startAmbience();
-    if (!this.timer) {
-      this.nextBeat = c.currentTime + 0.1; this.beat = 0;
-      this.timer = setInterval(() => this.schedule(), 100);
-    }
+    this.scoreKey = '';
+    this.nextStep = c.currentTime + 0.1;
+    if (!this.timer) this.timer = setInterval(() => this.schedule(), 100);
   }
   stopMusic(): void {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
@@ -100,7 +98,7 @@ class AudioEngine {
     const c = this.ctx as AudioContext;
     const ch = CHAPTER_BY_N(this.chapter).music;
     if (this.drone) { this.drone.g.gain.setTargetAtTime(0, c.currentTime, 0.4); const d = this.drone; setTimeout(() => d.o.forEach((o) => { try { o.stop(); } catch { /* */ } }), 2500); }
-    const g = c.createGain(); g.gain.value = 0; g.gain.setTargetAtTime(this.mood === 'title' ? 0.5 : 0.35, c.currentTime, 0.8);
+    const g = c.createGain(); g.gain.value = 0; g.gain.setTargetAtTime(this.mood === 'title' ? 0.3 : 0.2, c.currentTime, 0.8);
     const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = this.mood === 'boss' ? 900 : this.mood === 'battle' ? 650 : 420; f.Q.value = 2;
     const base = ch.root / 2;
     const oscs: OscillatorNode[] = [];
@@ -140,40 +138,139 @@ class AudioEngine {
     this.dripTimer = setTimeout(drip, 1500);
   }
 
+  private score: Score | null = null;
+  private scoreKey = '';
+  private step = 0;
+  private nextStep = 0;
+  private byStep: { lead: Map<number, ScoreNote>; arp: Map<number, ScoreNote>; bass: Map<number, ScoreNote> } | null = null;
+
+  private loadScore(): void {
+    const key = `${this.chapter}:${this.mood}`;
+    if (key === this.scoreKey && this.score) return;
+    const m = CHAPTER_BY_N(this.chapter).music;
+    this.score = compose(m.mode, this.mood, this.chapter);
+    const idx = (a: ScoreNote[]): Map<number, ScoreNote> => new Map(a.map((n) => [n.step, n]));
+    this.byStep = { lead: idx(this.score.lead), arp: idx(this.score.arp), bass: idx(this.score.bass) };
+    this.scoreKey = key; this.step = 0;
+  }
+
+  /** a sixteenth-note sequencer: reads the composed score and plays each part on its own instrument */
   private schedule(): void {
     const c = this.ctx; if (!c) return;
+    this.loadScore();
+    const sc = this.score as Score, by = this.byStep as NonNullable<typeof this.byStep>;
     const ch = CHAPTER_BY_N(this.chapter).music;
-    const tempo = ch.tempo * (this.mood === 'boss' ? 1.5 : this.mood === 'battle' ? 1.25 : 1);
-    const spb = 60 / tempo;
-    while (this.nextBeat < c.currentTime + 0.4) {
-      const t = this.nextBeat;
-      const b = this.beat;
-      // melody: sparse pentatonic-ish steps on the chapter's mode
-      const prob = this.mood === 'title' ? 0.4 : this.mood === 'camp' ? 0.32 : 0.5;
-      if (b % 2 === 0 && Math.random() < prob) {
-        const deg = ch.mode[Math.floor(Math.random() * ch.mode.length)];
-        const oct = Math.random() < 0.3 ? 2 : 1;
-        this.pluck(ch.root * Math.pow(2, deg / 12) * oct, t, spb * 2.4, this.mood === 'camp' || this.mood === 'title' ? 0.16 : 0.12, ch.tone === 'sawtooth' ? 'triangle' : 'sine');
+    const tempo = ch.tempo * (this.mood === 'boss' ? 1.45 : this.mood === 'battle' ? 1.2 : this.mood === 'title' ? 0.9 : 1);
+    const sd = 60 / tempo / 4;                         // seconds per sixteenth
+    const fq = (semis: number, oct: number): number => ch.root * Math.pow(2, (semis + 12 * oct) / 12);
+    const fight = this.mood === 'battle' || this.mood === 'boss';
+    const total = sc.bars * 16;
+    if (this.nextStep < c.currentTime - 1) this.nextStep = c.currentTime + 0.05;
+    while (this.nextStep < c.currentTime + 0.4) {
+      const t = this.nextStep, s = this.step % total, inBar = s % 16, bar = Math.floor(s / 16);
+      const chord = sc.chords[bar];
+      // strings under everything, one chord a bar (a choir "ah" joins for a boss)
+      if (inBar === 0) {
+        for (const semis of chord) this.pad(fq(semis, 1), t, sd * 16, this.mood === 'camp' ? 0.032 : 0.04);
+        if (this.mood === 'boss') for (const semis of chord) this.choir(fq(semis, 1), t, sd * 16, 0.03);
+        if (this.mood === 'boss' || (this.mood === 'title' && bar % 4 === 0)) this.brass(chord.map((x) => fq(x, 1)), t, sd * 3, this.mood === 'boss' ? 0.07 : 0.05);
       }
-      // slow bass movement every 8 beats
-      if (b % 8 === 0) { const deg = ch.mode[Math.floor((b / 8) % ch.mode.length)]; this.pluck(ch.root / 2 * Math.pow(2, deg / 12), t, spb * 6, 0.18, 'triangle'); }
-      // war drums in fights
-      if (this.mood !== 'camp' && this.mood !== 'title') {
-        if (b % 4 === 0) this.drum(t, 0.5, 70);
-        if (this.mood === 'boss' && (b % 4 === 2 || b % 8 === 7)) this.drum(t, 0.35, 90);
-        if (b % 2 === 1 && this.mood === 'battle') this.hat(t, 0.05);
+      const bn = by.bass.get(s); if (bn) this.bassNote(fq(bn.semis, 1), t, bn.dur * sd, 0.2 * bn.vel * (fight ? 1.05 : 0.9));
+      const an = by.arp.get(s); if (an) this.harp(fq(an.semis, 1), t, an.dur * sd, (fight ? 0.07 : this.mood === 'camp' ? 0.1 : 0.085) * an.vel);
+      const ln = by.lead.get(s); if (ln) this.lead(fq(ln.semis, 1), t, ln.dur * sd, (fight ? 0.1 : 0.115) * ln.vel);
+      // percussion
+      if (this.mood === 'title' && inBar === 0 && bar % 2 === 0) this.drum(t, 0.3, 60);
+      if (fight) {
+        const boss = this.mood === 'boss';
+        if (inBar === 0 || inBar === 8 || (boss && (inBar === 3 || inBar === 6 || inBar === 11 || inBar === 14))) this.drum(t, boss ? 0.55 : 0.45, 62);
+        if (inBar === 4 || inBar === 12) this.snare(t, boss ? 0.2 : 0.14);
+        if (inBar % 2 === 0) this.hat(t, boss ? 0.045 : 0.035);
+        if (boss && inBar === 0 && bar % 2 === 1) this.hit(t);
       }
-      this.nextBeat += spb / 2; this.beat++;
+      this.nextStep += sd; this.step++;
     }
   }
 
-  private pluck(freq: number, t: number, dur: number, vol: number, type: OscillatorType): void {
-    const c = this.ctx as AudioContext;
-    const o = c.createOscillator(); o.type = type; o.frequency.value = freq;
-    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
-    o.connect(f); f.connect(g); g.connect(this.musicBus); o.start(t); o.stop(t + dur + 0.05);
+  // ---- instruments (all through the music bus)
+  private env(g: GainNode, t: number, a: number, peak: number, hold: number, rel: number): void {
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
+    g.gain.setValueAtTime(Math.max(0.0002, peak), t + a + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + a + hold + rel);
   }
+  /** warm string pad: two detuned saws and a triangle through a gentle low-pass, slow swell */
+  private pad(freq: number, t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(500, t); f.frequency.linearRampToValueAtTime(1100, t + dur * 0.5); f.frequency.linearRampToValueAtTime(600, t + dur); f.Q.value = 0.4;
+    const g = c.createGain(); this.env(g, t, Math.min(0.7, dur * 0.35), vol, Math.max(0.05, dur - 1.5), 0.9);
+    for (const [type, det] of [['sawtooth', -8], ['sawtooth', 8], ['triangle', 0]] as [OscillatorType, number][]) {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = freq; o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur + 1.1);
+    }
+    f.connect(g); g.connect(this.musicBus);
+  }
+  /** a sung "ah" for boss fights: a saw through two vowel-ish band-passes */
+  private choir(freq: number, t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const g = c.createGain(); this.env(g, t, 0.5, vol, Math.max(0.05, dur - 1.2), 0.8);
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq / 2;
+    const lfo = c.createOscillator(); lfo.frequency.value = 5.2; const lg = c.createGain(); lg.gain.value = 6; lfo.connect(lg); lg.connect(o.detune);
+    for (const [fr, q] of [[700, 6], [1150, 8]] as [number, number][]) { const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = fr; b.Q.value = q; o.connect(b); b.connect(g); }
+    o.start(t); lfo.start(t); o.stop(t + dur + 1); lfo.stop(t + dur + 1); g.connect(this.musicBus);
+  }
+  private brass(freqs: number[], t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(380, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.09); f.frequency.exponentialRampToValueAtTime(700, t + dur);
+    const g = c.createGain(); this.env(g, t, 0.025, vol, dur * 0.4, dur * 0.8);
+    for (const fr of freqs) for (const det of [-6, 6]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur * 1.4 + 0.1); }
+    f.connect(g); g.connect(this.musicBus);
+  }
+  private bassNote(freq: number, t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const g = c.createGain(); this.env(g, t, 0.015, vol, Math.max(0.02, dur * 0.5), Math.max(0.12, dur * 0.7));
+    for (const [type, mul, v] of [['sine', 1, 1], ['triangle', 2, 0.25]] as [OscillatorType, number, number][]) {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = freq * mul; const og = c.createGain(); og.gain.value = v; o.connect(og); og.connect(g); o.start(t); o.stop(t + dur * 1.3 + 0.2);
+    }
+    g.connect(this.musicBus);
+  }
+  /** a harp-like pluck: bright attack, long ringing tail */
+  private harp(freq: number, t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(4200, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.9);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.9, dur + 0.7));
+    for (const [type, mul, v] of [['triangle', 1, 1], ['sine', 2, 0.35], ['sine', 3, 0.12]] as [OscillatorType, number, number][]) {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = freq * mul; const og = c.createGain(); og.gain.value = v; o.connect(og); og.connect(f); o.start(t); o.stop(t + dur + 1.2);
+    }
+    f.connect(g); g.connect(this.musicBus);
+  }
+  /** a flute-like lead: breathy attack, gentle vibrato that blooms after a moment */
+  private lead(freq: number, t: number, dur: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const g = c.createGain(); this.env(g, t, 0.05, vol, Math.max(0.02, dur - 0.18), 0.22);
+    const vib = c.createOscillator(); vib.frequency.value = 5.1; const vg = c.createGain(); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(7, t + Math.min(0.45, dur)); vib.connect(vg);
+    for (const [type, mul, v] of [['sine', 1, 1], ['triangle', 2, 0.18], ['sine', 3, 0.06]] as [OscillatorType, number, number][]) {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = freq * mul; const og = c.createGain(); og.gain.value = v; vg.connect(o.detune); o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + 0.4);
+    }
+    vib.start(t); vib.stop(t + dur + 0.4);
+    const n = c.createBufferSource(); n.buffer = this.noise(); const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = freq * 2.5; nf.Q.value = 2;
+    const ng = c.createGain(); ng.gain.setValueAtTime(vol * 0.5, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    n.connect(nf); nf.connect(ng); ng.connect(this.musicBus); n.start(t, Math.random()); n.stop(t + 0.1);
+    g.connect(this.musicBus);
+  }
+  private snare(t: number, vol: number): void {
+    const c = this.ctx as AudioContext;
+    const s = c.createBufferSource(); s.buffer = this.noise(); const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.8;
+    const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    s.connect(f); f.connect(g); g.connect(this.musicBus); s.start(t, Math.random()); s.stop(t + 0.18);
+    const o = c.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(130, t + 0.09);
+    const og = c.createGain(); og.gain.setValueAtTime(vol * 0.6, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1); o.connect(og); og.connect(this.musicBus); o.start(t); o.stop(t + 0.12);
+  }
+  /** an orchestral hit for boss bars: a drum thud with a bright burst on top */
+  private hit(t: number): void {
+    this.drum(t, 0.7, 52);
+    const c = this.ctx as AudioContext;
+    const s = c.createBufferSource(); s.buffer = this.noise(); const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2500;
+    const g = c.createGain(); g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    s.connect(f); f.connect(g); g.connect(this.musicBus); s.start(t, Math.random()); s.stop(t + 0.45);
+  }
+
   private drum(t: number, vol: number, freq: number): void {
     const c = this.ctx as AudioContext;
     const o = c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(freq * 1.8, t); o.frequency.exponentialRampToValueAtTime(freq, t + 0.12);

@@ -1,6 +1,8 @@
 import type { HeroId } from '../content/schema.ts';
 import { INK, PEN, alpha, circle, ctx2d, ellipse, glow, limb, line, makeCanvas, poly, shade, type Ctx } from './draw.ts';
-import { HERO_FOOT, HERO_H, HERO_W, paintHero } from './heroes.ts';
+import { HERO_FOOT, HERO_H, HERO_W } from './heroes.ts';
+import { heroFrame } from './pixel/heroSprites.ts';
+import { previewFrames } from './pixel/fxFrames.ts';
 import { PIX, paintBackgroundVector } from './backgrounds.ts';
 import { pixelize } from './pixel/pixelize.ts';
 
@@ -20,10 +22,11 @@ function tent(c: Ctx, x: number, y: number, s: number, color: string): void {
   poly(c, [[x, y - 134 * s], [x + 24 * s, y - 128 * s], [x, y - 120 * s]], '#c44a3a', { lw: 1.5, ink: INK }, 0.2);
 }
 
-function campfire(c: Ctx, x: number, y: number): void {
+function campfire(c: Ctx, x: number, y: number, flames = true): void {
   glow(c, x, y - 20, 200, '#ff8a2a', 0.45);
   for (const a of [-0.5, 0.5, 0]) { c.save(); c.translate(x, y); c.rotate(a); limb(c, -30, 0, 30, 0, 9, 9, '#5a3a22'); c.restore(); }
   for (let i = 0; i < 7; i++) circle(c, x - 40 + i * 13, y + 4 + (i % 2) * 3, 7, '#6a6a70', { lw: 2, ink: INK }, 0.2);
+  if (!flames) return;
   poly(c, [[x - 16, y - 2], [x - 20, y - 26], [x - 6, y - 48], [x, y - 70], [x + 8, y - 44], [x + 22, y - 24], [x + 16, y - 2]], '#ff7a2a', { lw: 2, ink: INK }, 0.4, true);
   poly(c, [[x - 8, y - 2], [x - 8, y - 20], [x, y - 40], [x + 8, y - 18], [x + 8, y - 2]], '#ffd24a', { lw: 0, ink: INK }, 0.3, true);
 }
@@ -72,18 +75,18 @@ function lectern(c: Ctx, x: number, y: number, s: number): void {
   glow(c, x, y - 60 * s, 34, '#ffe08a', 0.35);
 }
 
-let campCache: { key: string; cv: HTMLCanvasElement } | null = null;
+const baseCache = new Map<number, HTMLCanvasElement>();
 
-export function paintCamp(chapter: number, party: HeroId[]): HTMLCanvasElement {
-  const key = `${chapter}:${party.join(',')}`;
-  if (campCache?.key === key) return campCache.cv;
+/** the camp as painted, boiled down to pixel art, with no party and no flames (those are animated on top) */
+function campBase(chapter: number): HTMLCanvasElement {
+  const hit = baseCache.get(chapter);
+  if (hit) return hit;
   const cv = makeCanvas(CAMP_W, CAMP_H);
   const c = ctx2d(cv);
   const L = paintBackgroundVector(chapter, 'cavern', 7);
   for (const l of [L.far, L.mid, L.floor]) c.drawImage(l, 0, 0, CAMP_W, CAMP_H);
   const W = CAMP_W; const H = CAMP_H;
   const gy = H * 0.7;
-  // props
   tent(c, W * 0.46, gy + 16, 1.15, '#7a6a52');
   mapTable(c, W * 0.2, gy + 40, 1.0);
   rack(c, W * 0.72, gy + 12, 1.0);
@@ -91,23 +94,83 @@ export function paintCamp(chapter: number, party: HeroId[]): HTMLCanvasElement {
   shrine(c, W * 0.08, gy + 70, 0.95);
   noticeBoard(c, W * 0.34, gy + 96, 0.9);
   lectern(c, W * 0.62, gy + 96, 0.95);
-  campfire(c, W * 0.5, gy + 78);
-  // cave frame
+  campfire(c, W * 0.5, gy + 78, false);
   c.drawImage(L.near, 0, 0, CAMP_W, CAMP_H);
   const vg = c.createRadialGradient(W / 2, H * 0.6, H * 0.3, W / 2, H * 0.6, H * 0.95);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
   c.fillStyle = vg; c.fillRect(0, 0, W, H);
   void ellipse; void shade; void alpha;
-  // the whole painted scene is boiled down to pixel art, then the party (native pixel sprites) stands around the fire
   const out = makeCanvas(CAMP_W, CAMP_H); const oc = ctx2d(out);
   oc.imageSmoothingEnabled = false;
   oc.drawImage(pixelize(cv, { outW: CAMP_W / PIX, outH: CAMP_H / PIX, levels: 8, dither: 0.8 }), 0, 0, CAMP_W, CAMP_H);
-  const spots = [[0.40, 0.80], [0.52, 0.80], [0.64, 0.80], [0.34, 0.95], [0.58, 0.95]];
-  party.slice(0, 5).forEach((id, i) => {
-    const [fx, fy] = spots[i];
-    const fxp = Math.round(W * fx / PIX) * PIX, fyp = Math.round(H * fy / PIX) * PIX;
-    oc.drawImage(paintHero(id), fxp - (HERO_W * PIX) / 2, fyp - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
-  });
-  campCache = { key, cv: out };
+  baseCache.set(chapter, out);
+  if (baseCache.size > 3) baseCache.delete(baseCache.keys().next().value as number);
   return out;
+}
+
+/** an orange firelight as ordered-dither dots (native pixels), drawn additively and flickered by its alpha */
+export function ditherLight(radius: number, color = '#ff963c'): HTMLCanvasElement {
+  const rgb = [parseInt(color.slice(1, 3), 16) || 255, parseInt(color.slice(3, 5), 16) || 150, parseInt(color.slice(5, 7), 16) || 60];
+  const n = radius * 2, cv = document.createElement('canvas'); cv.width = n; cv.height = Math.round(n * 0.8);
+  const x = cv.getContext('2d') as CanvasRenderingContext2D; const img = x.createImageData(cv.width, cv.height);
+  const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  for (let y = 0; y < cv.height; y++) for (let px = 0; px < cv.width; px++) {
+    const d = Math.hypot((px + 0.5 - radius) / radius, (y + 0.5 - radius * 0.8) / (radius * 0.8));
+    const a = d >= 1 ? 0 : (1 - d) * (1 - d);
+    if (a > (B[((y & 3) << 2) | (px & 3)] + 0.5) / 16 * 0.9) { const i = (y * cv.width + px) * 4; img.data[i] = rgb[0]; img.data[i + 1] = rgb[1]; img.data[i + 2] = rgb[2]; img.data[i + 3] = 255; }
+  }
+  x.putImageData(img, 0, 0);
+  return cv;
+}
+
+const CAMP_SEATS: [number, number][] = [[0.40, 0.80], [0.52, 0.80], [0.64, 0.80], [0.34, 0.95], [0.58, 0.95]];
+
+/**
+ * Bring the camp to life on a canvas: the party breathes and blinks around a crackling fire whose light flickers on the
+ * scene, with embers drifting up. Returns a function that stops it. With reduced motion it paints one still frame.
+ */
+export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroId[], reduced: boolean): () => void {
+  cv.width = CAMP_W; cv.height = CAMP_H;
+  const ctx = cv.getContext('2d') as CanvasRenderingContext2D; ctx.imageSmoothingEnabled = false;
+  const base = campBase(chapter), flame = previewFrames('flame'), light = ditherLight(60);
+  const fireX = Math.round((CAMP_W * 0.5) / PIX) * PIX, fireY = Math.round((CAMP_H * 0.7 + 78) / PIX) * PIX;
+  const seated = party.slice(0, 5).map((id, i) => ({ id, x: Math.round((CAMP_W * CAMP_SEATS[i][0]) / PIX) * PIX, y: Math.round((CAMP_H * CAMP_SEATS[i][1]) / PIX) * PIX, phase: (i * 677) % 1900 }));
+  seated.sort((a, b) => a.y - b.y);
+  const embers: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
+  const t0 = performance.now();
+  const frame = (): void => {
+    const t = reduced ? 0 : performance.now() - t0;
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.drawImage(base, 0, 0);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = reduced ? 0.3 : 0.27 + 0.07 * Math.sin(t / 85) + 0.04 * Math.sin(t / 31);
+    ctx.drawImage(light, fireX - light.width * PIX / 2, fireY - light.height * PIX * 0.78, light.width * PIX, light.height * PIX);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    let fireDone = false;
+    const drawFire = (): void => {
+      fireDone = true;
+      const fr = flame[Math.floor(t / 75) % flame.length];
+      ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(fr, fireX - (fr.width * PIX) / 2, fireY - fr.height * PIX + 6, fr.width * PIX, fr.height * PIX);
+      ctx.globalCompositeOperation = 'source-over';
+    };
+    for (const h of seated) {
+      if (!fireDone && h.y > fireY) drawFire();
+      const f = heroFrame(h.id, 'idle', reduced ? 0 : Math.floor((t + h.phase) / 260) % 4).color;
+      ctx.drawImage(f, h.x - (HERO_W * PIX) / 2, h.y - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
+    }
+    if (!fireDone) drawFire();
+    if (!reduced) {
+      if (Math.random() < 0.5) embers.push({ x: fireX + (Math.random() - 0.5) * 36, y: fireY - 20, vx: (Math.random() - 0.5) * 0.6, vy: -(0.8 + Math.random() * 1.6), life: 1 });
+      for (let i = embers.length - 1; i >= 0; i--) {
+        const e = embers[i]; e.x += e.vx; e.y += e.vy; e.life -= 0.012;
+        if (e.life <= 0) { embers.splice(i, 1); continue; }
+        ctx.globalAlpha = e.life; ctx.fillStyle = e.life > 0.6 ? '#ffe08a' : '#ff8a2e';
+        ctx.fillRect(Math.round(e.x / PIX) * PIX, Math.round(e.y / PIX) * PIX, PIX, PIX);
+      }
+      ctx.globalAlpha = 1;
+    }
+  };
+  frame();
+  if (reduced) return () => undefined;
+  const id = window.setInterval(frame, 80);
+  return () => window.clearInterval(id);
 }

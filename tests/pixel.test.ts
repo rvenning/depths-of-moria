@@ -46,3 +46,24 @@ describe('the hero sprites', () => {
     expect(sigs.size).toBe(HERO_LIST.length);
   });
 });
+
+import { creatureImage } from '../src/art/pixel/creatureSprites.ts';
+import { ENEMY_LIST } from '../src/content/enemies.ts';
+
+describe('the creature sprites', () => {
+  it('draws all 80 enemies as sound sprites (filled, in bounds, stood on the floor, small palette)', () => {
+    expect(ENEMY_LIST.length).toBeGreaterThanOrEqual(80);
+    for (const e of ENEMY_LIST) {
+      const n = Math.round(85 * (e.scale ?? 1) * (e.tier === 'boss' ? 1.05 : 1));
+      const img = creatureImage(e, n);
+      let opaque = 0, lo = n, hi = 0, left = n, right = 0;
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (img.rgba[(y * n + x) * 4 + 3]) { opaque++; lo = Math.min(lo, y); hi = Math.max(hi, y); left = Math.min(left, x); right = Math.max(right, x); }
+      expect(opaque, `${e.id} is drawn`).toBeGreaterThan(n * n * 0.06);
+      expect(opaque, `${e.id} does not flood its canvas`).toBeLessThan(n * n * 0.8);
+      expect(hi, `${e.id} reaches towards the floor`).toBeGreaterThan(n * 0.55);
+      expect(right - left, `${e.id} has width`).toBeGreaterThan(n * 0.2);
+      expect(colors(img.rgba).size, `${e.id} palette`).toBeLessThan(160);
+      expect(img.normal?.length, `${e.id} has a normal map`).toBe(n * n * 4);
+    }
+  });
+});

@@ -15,7 +15,7 @@ core/         pure logic, no DOM: rng, stats, battle engine, floors, loot, econo
               progression, expedition, ages, game reducers, balance config
 persistence/  IndexedDB (localStorage fallback), versioned schema, migrations, export/import
 audio/        WebAudio synth: music director + SFX + volume buses
-art/          pixel engine (pixel/engine.ts, heroSprites.ts, pixelize.ts), vector painters for creatures/backgrounds/camp that are pixelised, icons, sprite cache
+art/          pixel engine (pixel/engine.ts), hero rigs (heroSprites.ts), creature drawings (creatureSprites.ts), effect frames (fxFrames.ts), vector painters for backgrounds/camp that are pixelised (pixelize.ts), animated camp and title scenes, icons, sprite cache
 ui/           React screens/components, battle canvas view, hooks
 tools/        balance simulation CLI, icon generator
 tests/        unit, integration, e2e

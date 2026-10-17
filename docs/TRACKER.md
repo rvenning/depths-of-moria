@@ -54,3 +54,14 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [~] Sprites have a two-pixel idle bob, a lunge and a flash but no hand-drawn animation frames (idle/attack poses per hero would be the next art step).
 - [~] Creatures share the heroes' palette logic but are pixelised paintings, not hand-placed pixels; the goblin family shares one body plan.
 - Verified: typecheck, 203 unit tests, build, e2e 8/8, monkey run (136 clicks, 0 errors), ~56 fps battle scene.
+
+## HD-2D pass — aiming at Octopath Traveler II's presentation (2026-10-18)
+- [x] Real-time lighting on sprites and backdrops (normal maps; flickering torches; spell, hit and heal flashes; per-chapter ambient tint), bloom, vignette, baked depth of field.
+- [x] Animated heroes: 4-frame breathing/blinking idle, wind-up, strike, hurt, cast and victory poses for all seven (engine-drawn rigs).
+- [x] All 80 enemies redrawn by the pixel engine (consistent with the heroes), with breathing, wind-up, strike and hurt frames.
+- [x] 13 pixel spell/impact effect clips mapped to every skill effect type.
+- [x] Animated camp (idle party, crackling fire, flickering light, embers) and animated title.
+- [x] Composed music (chords, answering melody, harp, strings, bass, taiko; brass and choir for bosses) with unit tests that keep every note inside the chapter's scale.
+- [x] Cinematics: boss introduction (letterbox, push-in, name card), crit hit-stop, turn marker, victory confetti.
+- [x] Graphics setting with automatic fallback on slow GPUs.
+- [~] Honest comparison with the benchmark: the techniques (HD-2D lighting, depth of field, bloom, animated sprites, cinematic battle staging, a composed score) are in; the *scale* is not. Octopath Traveler II has a large team's hand-drawn sprite sheets with many frames per character, 3D diorama environments, an orchestral recorded soundtrack, voiced story, a full overworld and eight character campaigns. This game has procedural sprites with a handful of frames, 2D layered backdrops, a synthesised score and a menu-driven camp. It should be judged as a polished indie auto-battler with an HD-2D look, not as equal to the benchmark.

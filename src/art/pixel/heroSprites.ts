@@ -14,106 +14,158 @@ def('boroCloak', '#7a3a2c'); def('tabard', '#3d4560'); def('bone', '#f0e8d4', { 
 def('cyan', '#a8eeff', { emissive: true, dither: 0 });
 
 const EYE = '#1d1322';
-/** near eye 2x3 with a highlight, far eye 1x3 (the face is turned to the right) */
-function eyes(S: Sprite, x: number, y: number, iris = EYE): void {
+type Pt = [number, number];
+
+/**
+ * A pose: how far each part of the rig is moved from its rest position (pixels).
+ * `up`/`lean` move the whole upper body, `hand`/`tip` the weapon hand and the weapon's tip, `rhand` the other hand,
+ * `head` nods the head, `cape` swings the hem of a cloak or robe, `blink` closes the eyes.
+ */
+export interface Pose { up?: number; lean?: number; hand?: Pt; tip?: Pt; rhand?: Pt; head?: Pt; cape?: number; blink?: boolean; open?: boolean }
+
+export type HeroAnim = 'idle' | 'wind' | 'strike' | 'hurt' | 'cast' | 'win';
+/** the frames of each animation; the battle scene plays `idle` in a loop and the others on events */
+export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
+  idle: [{}, { up: -1, cape: 1, hand: [0, -1], rhand: [0, -1] }, { up: -1, cape: 2, hand: [0, -1], rhand: [0, -1], head: [0, 1] }, { cape: 1, head: [0, 0], blink: true }],
+  wind: [{ lean: -3, up: 1, hand: [-5, -7], tip: [-14, 10], rhand: [2, -2], head: [-1, 0], cape: 2 }],
+  strike: [{ lean: 5, up: 1, hand: [7, 3], tip: [14, 26], rhand: [-3, 0], head: [2, 1], cape: -3 }],
+  hurt: [{ lean: -4, up: 1, hand: [-3, 3], tip: [-8, 10], rhand: [-2, 3], head: [-2, 1], cape: 3, blink: true }],
+  cast: [{ lean: -1, up: 0, hand: [1, -7], tip: [3, -6], rhand: [2, -9], cape: 1 }, { lean: 1, up: -1, hand: [2, -10], tip: [4, -8], rhand: [3, -12], cape: 2 }],
+  win: [{ up: -2, hand: [2, -13], tip: [-1, -12], rhand: [1, -13], head: [0, -1], cape: 2 }, { up: 0, hand: [2, -11], tip: [-1, -10], rhand: [1, -11], cape: 0 }],
+};
+
+/** swing the part of a cloak below y0 sideways, more the lower it hangs */
+const sway = (pts: Pt[], amt: number, y0: number): Pt[] => pts.map(([x, y]) => [x + (y > y0 ? (amt * (y - y0)) / (82 - y0) : 0), y] as Pt);
+const eyes = (S: Sprite, x: number, y: number, blink: boolean | undefined, iris = EYE): void => {
+  if (blink) { S.dot(x, y + 1, iris); S.dot(x + 1, y + 1, iris); S.dot(x + 5, y + 1, iris); return; }
   S.dot(x, y, iris); S.dot(x + 1, y, iris); S.dot(x, y + 1, iris); S.dot(x + 1, y + 1, iris); S.dot(x, y + 2, iris); S.dot(x + 1, y + 2, iris);
   S.dot(x, y, '#ffffff');
   S.dot(x + 5, y, iris); S.dot(x + 5, y + 1, iris); S.dot(x + 5, y + 2, iris);
-}
+};
 const brow = (S: Sprite, x: number, y: number, c: string): void => { for (const dx of [0, 1, 2]) S.dot(x + dx, y, c); for (const dx of [5, 6]) S.dot(x + dx, y, c); };
+/** the offsets a pose resolves to */
+const rig = (P: Pose): { up: number; lean: number; cape: number; h: Pt; t: Pt; r: Pt; hd: Pt } => ({ up: P.up ?? 0, lean: P.lean ?? 0, cape: P.cape ?? 0, h: P.hand ?? [0, 0], t: P.tip ?? [0, 0], r: P.rhand ?? [0, 0], hd: P.head ?? [0, 0] });
+const mid = (a: Pt, b: Pt, k = 0.5): Pt => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+const add = (a: Pt, b: Pt): Pt => [a[0] + b[0], a[1] + b[1]];
 
 // ---------------------------------------------------------------- heroes (72x92, feet at y=90)
-function aragorn(): PixImg {
+function aragorn(P: Pose): PixImg {
+  const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.poly([[22, 28], [15, 38], [10, 58], [8, 80], [31, 81], [34, 58], [35, 30]], 'cloakGreen', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
-  S.line([[22, 33], [17, 44]], 6, 'tunicGreen', { g: 'rarm', light: -0.5 }); S.ell(16, 47, 3.4, 3.4, 'skin', { g: 'rarm' });
+  S.poly(sway([[22, 28], [15, 38], [10, 58], [8, 80], [31, 81], [34, 58], [35, 30]], cape, 30), 'cloakGreen', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
   S.poly([[23, 50], [30, 50], [29, 74], [22, 74]], 'leather', { g: 'legA', bevel: 3 });
   S.poly([[30, 50], [39, 50], [41, 74], [31, 74]], 'leather', { g: 'legB', bevel: 3 });
   S.poly([[20, 68], [30, 68], [31, 82], [17, 82]], 'leatherDark', { g: 'bootA', bevel: 3 }); S.poly([[30, 68], [40, 68], [45, 82], [31, 82]], 'leatherDark', { g: 'bootB', bevel: 3 });
   S.poly([[20, 68], [30, 68], [30, 71], [20, 71]], 'leather', { g: 'bootA', flat: true, tone: 2.6 }); S.poly([[30, 68], [40, 68], [40, 71], [31, 71]], 'leather', { g: 'bootB', flat: true, tone: 2.6 });
+  S.at(lean, 8 + up);
+  const sh: Pt = [22, 33], rh: Pt = add([16, 47], r);
+  S.line([sh, mid(sh, rh)], 6, 'tunicGreen', { g: 'rarm', light: -0.5 }); S.ell(rh[0], rh[1], 3.4, 3.4, 'skin', { g: 'rarm' });
   S.rect(30, 24, 8, 8, 'skin', { g: 'neck', light: -0.8 });
   S.poly([[21, 29], [41, 29], [40, 51], [23, 51]], 'tunicGreen', { g: 'torso', bevel: 5, grad: 0.5, fold: { amp: 0.25, period: 6, angle: 1.3 } });
   S.poly([[23, 46], [40, 46], [40, 51], [23, 51]], 'leatherDark', { g: 'torso', flat: true, tone: 1.8 }); S.rect(30, 46, 4, 5, 'gold', { g: 'torso', flat: true, tone: 3 });
   S.poly([[27, 29], [35, 29], [31, 38]], 'skin', { g: 'torso', flat: true, tone: 1.6 });
-  S.line([[39, 33], [46, 37]], 6, 'tunicGreen', { g: 'farm' }); S.line([[45, 36], [51, 38]], 5.5, 'leather', { g: 'farm' }); S.ell(53, 38, 3.6, 3.6, 'skin', { g: 'farm' });
-  S.line([[52, 37], [58, 8]], 3.6, 'steel', { g: 'sword', bevel: 1.8 }, 2.2); S.line([[46, 37], [59, 39]], 3, 'gold', { g: 'guard', bevel: 1.5 });
+  const H = add([53, 38], h), E = add([46, 37], [h[0] * 0.6, h[1] * 0.6]);
+  S.line([[39, 33], E], 6, 'tunicGreen', { g: 'farm' }); S.line([add(E, [-1, 0]), H], 5.5, 'leather', { g: 'farm' }); S.ell(H[0], H[1], 3.6, 3.6, 'skin', { g: 'farm' });
+  S.line([add(H, [-1, -1]), add([58, 8], t)], 3.6, 'steel', { g: 'sword', bevel: 1.8 }, 2.2); S.line([add([46, 37], h), add([59, 39], h)], 3, 'gold', { g: 'guard', bevel: 1.5 });
   S.ell(40, 31, 5.5, 4.5, 'steel', { g: 'pauld' });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.poly([[20, 14], [24, 6], [32, 3], [41, 7], [43, 15], [36, 13], [26, 13], [25, 31], [18, 32]], 'hairDark', { g: 'hbk', bevel: 3 });
   S.ell(32, 17, 10, 11, 'skin', { g: 'head', bevel: 6 });
   S.poly([[22, 13], [25, 6], [32, 4], [40, 7], [42, 13], [39, 11], [34, 9], [29, 11], [25, 14]], 'hairDark', { g: 'head', bevel: 2.5 });
-  eyes(S, 35, 16); brow(S, 34, 14, '#3a281e');
+  eyes(S, 35, 16, P.blink); brow(S, 34, 14, '#3a281e');
   S.dot(42, 20, '#c98a62'); S.dot(41, 20, '#d49870'); S.dot(38, 23, '#a5604a'); S.dot(39, 23, '#a5604a'); S.dot(40, 23, '#a5604a');
   for (let x = 32; x <= 41; x += 2) S.dot(x, 25, '#a87455');
   return S.finish();
 }
-function gimli(): PixImg {
+function gimli(P: Pose): PixImg {
+  const { up, lean, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.line([[18, 54], [13, 66]], 8, 'mail', { g: 'rarm', light: -0.5 }); S.ell(12, 69, 4.2, 4.2, 'skin', { g: 'rarm' });
   S.poly([[21, 70], [31, 70], [30, 82], [19, 82]], 'leatherDark', { g: 'legA' }); S.poly([[33, 70], [45, 70], [47, 82], [34, 82]], 'leatherDark', { g: 'legB' });
   S.poly([[17, 76], [31, 76], [32, 83], [14, 83]], 'steelDark', { g: 'legA', bevel: 2 }); S.poly([[33, 76], [47, 76], [51, 83], [33, 83]], 'steelDark', { g: 'legB', bevel: 2 });
+  S.at(lean, 8 + up);
+  const rh = add([12, 69], r);
+  S.line([[18, 54], mid([18, 54], rh, 0.9)], 8, 'mail', { g: 'rarm', light: -0.5 }); S.ell(rh[0], rh[1], 4.2, 4.2, 'skin', { g: 'rarm' });
   S.poly([[16, 50], [50, 50], [48, 73], [18, 73]], 'mail', { g: 'torso', bevel: 6, tex: 0.5, grad: 0.5 });
   S.poly([[18, 66], [48, 66], [48, 71], [18, 71]], 'leather', { g: 'torso', flat: true, tone: 2 }); S.rect(30, 66, 6, 5, 'gold', { g: 'torso', flat: true, tone: 3 });
-  S.line([[46, 54], [54, 46]], 8, 'mail', { g: 'farm', tex: 0.4 }); S.ell(56, 44, 4.4, 4.4, 'skin', { g: 'farm' });
-  S.line([[58, 52], [62, 16]], 3.4, 'wood', { g: 'haft', bevel: 1.7 });
-  S.poly([[55, 6], [66, 3], [69, 14], [66, 26], [58, 27], [57, 20]], 'steel', { g: 'axe', bevel: 3.5 });
+  const H = add([56, 44], h);
+  S.line([[46, 54], mid([46, 54], H, 0.9)], 8, 'mail', { g: 'farm', tex: 0.4 }); S.ell(H[0], H[1], 4.4, 4.4, 'skin', { g: 'farm' });
+  const top = add([62, 16], t), base = add([58, 52], h);
+  S.line([base, top], 3.4, 'wood', { g: 'haft', bevel: 1.7 });
+  const ax = (dx: number, dy: number): Pt[] => ([[55, 6], [66, 3], [69, 14], [66, 26], [58, 27], [57, 20]] as Pt[]).map(([x, y]) => [x + dx, y + dy] as Pt);
+  S.poly(ax(t[0] * 0.85 + h[0] * 0.15, t[1] * 0.85 + h[1] * 0.15), 'steel', { g: 'axe', bevel: 3.5 });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.ell(33, 40, 10, 9, 'skin', { g: 'head', bevel: 5 });
   S.poly([[23, 44], [43, 44], [47, 54], [43, 64], [33, 70], [24, 64], [19, 54]], 'hairOrange', { g: 'beard', bevel: 6, tex: 0.7, fold: { amp: 0.35, period: 4, angle: 1.5 } });
   S.poly([[22, 38], [24, 30], [33, 26], [42, 30], [44, 38]], 'steel', { g: 'helm', bevel: 4 });
   S.rect(21, 36, 24, 4, 'steelDark', { g: 'helm', flat: true, tone: 2.2 }); S.rect(35, 38, 3, 9, 'steel', { g: 'helm', bevel: 1.5 });
   S.poly([[31, 27], [34, 17], [38, 27]], 'red', { g: 'crest' });
-  eyes(S, 36, 40); brow(S, 35, 39, '#5a3a1e'); S.dot(40, 46, '#d98a62'); S.dot(41, 46, '#d98a62');
+  eyes(S, 36, 40, P.blink); brow(S, 35, 39, '#5a3a1e'); S.dot(40, 46, '#d98a62'); S.dot(41, 46, '#d98a62');
   return S.finish();
 }
-function frodo(): PixImg {
+function frodo(P: Pose): PixImg {
+  const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.poly([[22, 56], [15, 68], [13, 82], [46, 82], [44, 68], [40, 56]], 'hobCloak', { g: 'cloak', grad: 0.5, fold: { amp: 0.5, period: 7, angle: 0.15 }, bevel: 3 });
-  S.line([[24, 62], [20, 71]], 5, 'jacket', { g: 'rarm', light: -0.5 }); S.ell(20, 73, 3, 3, 'skin', { g: 'rarm' });
+  S.poly(sway([[22, 56], [15, 68], [13, 82], [46, 82], [44, 68], [40, 56]], cape, 58), 'hobCloak', { g: 'cloak', grad: 0.5, fold: { amp: 0.5, period: 7, angle: 0.15 }, bevel: 3 });
   S.poly([[26, 71], [31, 71], [31, 79], [26, 79]], 'tan', { g: 'legA' }); S.poly([[34, 71], [39, 71], [40, 79], [34, 79]], 'tan', { g: 'legB' });
   S.ell(28, 81, 7, 3, 'skin', { g: 'footA', bevel: 2 }); S.ell(41, 81, 7, 3, 'skin', { g: 'footB', bevel: 2 });
   for (const x of [24, 27, 30, 38, 41, 44]) S.dot(x, 80, '#a8714f');
+  S.at(lean, 8 + up);
+  const rh = add([20, 73], r);
+  S.line([[24, 62], mid([24, 62], rh, 0.9)], 5, 'jacket', { g: 'rarm', light: -0.5 }); S.ell(rh[0], rh[1], 3, 3, 'skin', { g: 'rarm' });
   S.poly([[24, 58], [40, 58], [41, 74], [23, 74]], 'jacket', { g: 'torso', bevel: 4, grad: 0.4 });
   for (const y of [62, 66, 70]) S.dot(32, y, '#f0bc46');
-  S.line([[40, 61], [48, 65]], 5, 'jacket', { g: 'farm' }); S.ell(50, 65, 3.2, 3.2, 'skin', { g: 'farm' });
-  S.line([[52, 64], [63, 50]], 3, 'cyan', { g: 'sting', flat: true, tone: 3.2, noLine: true });
+  const H = add([50, 65], h);
+  S.line([[40, 61], mid([40, 61], H, 0.9)], 5, 'jacket', { g: 'farm' }); S.ell(H[0], H[1], 3.2, 3.2, 'skin', { g: 'farm' });
+  S.line([add(H, [2, -1]), add([63, 50], t)], 3, 'cyan', { g: 'sting', flat: true, tone: 3.2, noLine: true });
   S.dot(31, 57, '#f0bc46'); S.dot(32, 58, '#f0bc46');
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.ell(32, 46, 11, 12, 'skin', { g: 'head', bevel: 6 });
   for (const [x, y] of [[21, 47], [21, 41], [24, 36], [29, 33], [35, 33], [40, 36], [43, 41]]) S.ell(x, y, 4.6, 4.6, 'hairBrown', { g: 'head', bevel: 2.5 });
   S.ell(32, 46, 10, 11, 'skin', { g: 'head', bevel: 6 });
   S.poly([[24, 40], [28, 36], [34, 35], [40, 38], [42, 42], [36, 40], [29, 41]], 'hairBrown', { g: 'head', bevel: 2 });
-  eyes(S, 35, 46); S.dot(37, 51, '#dc8c70'); S.dot(40, 51, '#dc8c70'); S.dot(42, 50, '#cf936b'); S.dot(38, 53, '#a5604a'); S.dot(39, 53, '#a5604a');
+  eyes(S, 35, 46, P.blink); S.dot(37, 51, '#dc8c70'); S.dot(40, 51, '#dc8c70'); S.dot(42, 50, '#cf936b'); S.dot(38, 53, '#a5604a'); S.dot(39, 53, '#a5604a');
   S.poly([[24, 46], [20, 41], [26, 45]], 'skin', { g: 'head' });
   return S.finish();
 }
-function legolas(): PixImg {
+function legolas(P: Pose): PixImg {
+  const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.poly([[23, 27], [16, 36], [14, 58], [26, 56], [28, 30]], 'elfCloak', { g: 'cloak', fold: { amp: 0.5, period: 6, angle: 0.1 }, bevel: 3 });
-  S.poly([[20, 26], [26, 24], [32, 50], [27, 52]], 'leather', { g: 'quiver', bevel: 2.5 });
-  for (const [x, y] of [[21, 22], [24, 21], [27, 22]]) { S.dot(x, y, '#f0e8d4'); S.dot(x, y + 1, '#d8c8a0'); S.dot(x, y + 2, '#a89868'); }
+  S.poly(sway([[23, 27], [16, 36], [14, 58], [26, 56], [28, 30]], cape * 0.6, 40), 'elfCloak', { g: 'cloak', fold: { amp: 0.5, period: 6, angle: 0.1 }, bevel: 3 });
   S.poly([[26, 50], [32, 50], [31, 74], [26, 74]], 'tan', { g: 'legA' }); S.poly([[32, 50], [38, 50], [40, 74], [33, 74]], 'tan', { g: 'legB' });
   S.poly([[25, 60], [32, 60], [32, 82], [22, 82]], 'leatherDark', { g: 'bootA', bevel: 2.5 }); S.poly([[32, 60], [39, 60], [44, 82], [32, 82]], 'leatherDark', { g: 'bootB', bevel: 2.5 });
+  S.at(lean, 8 + up);
+  S.poly([[20, 26], [26, 24], [32, 50], [27, 52]], 'leather', { g: 'quiver', bevel: 2.5 });
+  for (const [x, y] of [[21, 22], [24, 21], [27, 22]]) { S.dot(x, y, '#f0e8d4'); S.dot(x, y + 1, '#d8c8a0'); S.dot(x, y + 2, '#a89868'); }
   S.rect(29, 24, 8, 8, 'skinPale', { g: 'neck', light: -0.8 });
   S.poly([[24, 29], [40, 29], [38, 50], [26, 50]], 'elfTunic', { g: 'torso', bevel: 4, grad: 0.4, fold: { amp: 0.25, period: 6, angle: 1.3 } });
   S.poly([[26, 44], [38, 44], [38, 48], [26, 48]], 'leather', { g: 'torso', flat: true, tone: 2 }); S.rect(31, 44, 3, 4, 'gold', { g: 'torso', flat: true, tone: 3 });
-  S.line([[38, 32], [51, 36]], 5, 'elfTunic', { g: 'farm' }); S.ell(53, 37, 3.2, 3.2, 'skinPale', { g: 'farm' });
-  S.line([[54, 10], [62, 22], [64, 38], [62, 54], [54, 66]], 3, 'wood', { g: 'bow', bevel: 1.5 });
-  S.line([[54, 10], [44, 38], [54, 66]], 1, 'bone', { g: 'str', flat: true, tone: 3, noLine: true });
-  S.line([[44, 38], [61, 38]], 1.4, 'wood', { g: 'arrow', flat: true, tone: 2.6, noLine: true });
-  S.dot(62, 37, '#cfd8e6'); S.dot(62, 38, '#cfd8e6'); S.dot(62, 39, '#cfd8e6'); S.dot(45, 37, '#f0e8d4'); S.dot(46, 39, '#f0e8d4');
-  S.line([[36, 31], [43, 38]], 5, 'elfTunic', { g: 'parm' }); S.ell(44, 38.5, 3.1, 3.1, 'skinPale', { g: 'parm' });
+  const H = add([53, 37], h);
+  S.line([[38, 32], mid([38, 32], H, 0.9)], 5, 'elfTunic', { g: 'farm' }); S.ell(H[0], H[1], 3.2, 3.2, 'skinPale', { g: 'farm' });
+  const bow = ([[54, 10], [62, 22], [64, 38], [62, 54], [54, 66]] as Pt[]).map(([x, y]) => add([x, y], [h[0] * 0.5, h[1] * 0.5]));
+  const pull = add([44, 38], r);
+  S.line(bow, 3, 'wood', { g: 'bow', bevel: 1.5 });
+  S.line([bow[0], pull, bow[4]], 1, 'bone', { g: 'str', flat: true, tone: 3, noLine: true });
+  S.line([pull, add([61, 38], r)], 1.4, 'wood', { g: 'arrow', flat: true, tone: 2.6, noLine: true });
+  S.dot(62 + r[0], 37 + r[1], '#cfd8e6'); S.dot(62 + r[0], 38 + r[1], '#cfd8e6'); S.dot(62 + r[0], 39 + r[1], '#cfd8e6'); S.dot(45 + r[0], 37 + r[1], '#f0e8d4'); S.dot(46 + r[0], 39 + r[1], '#f0e8d4');
+  S.line([[36, 31], mid([36, 31], pull, 0.9)], 5, 'elfTunic', { g: 'parm' }); S.ell(pull[0], pull[1] + 0.5, 3.1, 3.1, 'skinPale', { g: 'parm' });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.poly([[23, 14], [27, 6], [34, 4], [42, 8], [44, 16], [40, 15], [32, 12], [29, 16], [30, 34], [25, 42], [21, 34], [22, 20]], 'hairBlonde', { g: 'hbk', bevel: 3 });
   S.ell(33, 18, 9, 10, 'skinPale', { g: 'head', bevel: 5.5 });
   S.poly([[24, 13], [28, 7], [35, 5], [41, 9], [43, 15], [38, 12], [32, 10], [27, 13]], 'hairBlonde', { g: 'head', bevel: 2 });
   S.poly([[26, 18], [19, 12], [27, 14]], 'skinPale', { g: 'ear' });
-  eyes(S, 36, 17, '#2a4a7a'); brow(S, 35, 15, '#b09a58');
+  eyes(S, 36, 17, P.blink, '#2a4a7a'); brow(S, 35, 15, '#b09a58');
   S.dot(42, 21, '#d7ab88'); S.dot(39, 24, '#b8685a'); S.dot(40, 24, '#b8685a');
+  void t;
   return S.finish();
 }
-function boromir(): PixImg {
+function boromir(P: Pose): PixImg {
+  const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.poly([[22, 28], [14, 40], [10, 60], [9, 80], [31, 81], [34, 58], [35, 30]], 'boroCloak', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
+  S.poly(sway([[22, 28], [14, 40], [10, 60], [9, 80], [31, 81], [34, 58], [35, 30]], cape, 30), 'boroCloak', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
   S.poly([[23, 50], [30, 50], [29, 74], [22, 74]], 'leatherDark', { g: 'legA', bevel: 3 }); S.poly([[30, 50], [39, 50], [41, 74], [31, 74]], 'leatherDark', { g: 'legB', bevel: 3 });
   S.poly([[22, 62], [30, 62], [30, 76], [21, 76]], 'steelDark', { g: 'legA', bevel: 2 }); S.poly([[30, 62], [40, 62], [42, 76], [31, 76]], 'steelDark', { g: 'legB', bevel: 2 });
   S.poly([[20, 72], [30, 72], [31, 82], [17, 82]], 'leatherDark', { g: 'bootA', bevel: 3 }); S.poly([[30, 72], [40, 72], [45, 82], [31, 82]], 'leatherDark', { g: 'bootB', bevel: 3 });
+  S.at(lean, 8 + up);
   S.rect(30, 24, 8, 8, 'skin', { g: 'neck', light: -0.8 });
   S.poly([[20, 29], [42, 29], [41, 52], [23, 52]], 'mail', { g: 'torso', bevel: 5, tex: 0.5, grad: 0.4 });
   S.poly([[26, 29], [37, 29], [38, 58], [27, 58]], 'tabard', { g: 'tabard', bevel: 3, fold: { amp: 0.25, period: 5, angle: 1.4 } });
@@ -122,67 +174,109 @@ function boromir(): PixImg {
   S.dot(32, 33, '#f6d870');
   S.poly([[23, 47], [40, 47], [40, 51], [23, 51]], 'leather', { g: 'belt', flat: true, tone: 1.9 }); S.rect(30, 47, 4, 4, 'gold', { g: 'belt', flat: true, tone: 3 });
   S.poly([[38, 50], [46, 53], [44, 62], [39, 57]], 'bone', { g: 'horn', bevel: 2 }); S.poly([[43, 58], [45, 55], [47, 54], [45, 62]], 'gold', { g: 'horn', flat: true, tone: 3 });
-  S.line([[39, 33], [46, 37]], 7, 'mail', { g: 'farm', tex: 0.4 }); S.ell(53, 38, 3.8, 3.8, 'skin', { g: 'farm' });
-  S.line([[52, 37], [58, 8]], 4.6, 'steel', { g: 'sword', bevel: 2.2 }, 2.6); S.line([[46, 37], [60, 39]], 3, 'gold', { g: 'guard', bevel: 1.5 });
+  const H = add([53, 38], h);
+  S.line([[39, 33], mid([39, 33], H, 0.9)], 7, 'mail', { g: 'farm', tex: 0.4 }); S.ell(H[0], H[1], 3.8, 3.8, 'skin', { g: 'farm' });
+  S.line([add(H, [-1, -1]), add([58, 8], t)], 4.6, 'steel', { g: 'sword', bevel: 2.2 }, 2.6); S.line([add([46, 37], h), add([60, 39], h)], 3, 'gold', { g: 'guard', bevel: 1.5 });
   S.ell(40, 31, 6, 5, 'steel', { g: 'pauld' });
-  S.ell(14, 54, 12.5, 13, 'steelDark', { g: 'shield', bevel: 4 }); S.ell(14, 54, 10, 10.5, 'wood', { g: 'shield2', bevel: 4 }); S.ell(14, 54, 3.2, 3.2, 'gold', { g: 'shield3', bevel: 1.5 });
-  for (const [x, y] of [[14, 45], [14, 63], [5, 54], [23, 54]]) S.dot(x, y, '#d6dbe6');
-  S.line([[22, 38], [17, 46]], 5, 'mail', { g: 'rarm', light: -0.4 });
+  const sc = add([14, 54], r);
+  S.ell(sc[0], sc[1], 12.5, 13, 'steelDark', { g: 'shield', bevel: 4 }); S.ell(sc[0], sc[1], 10, 10.5, 'wood', { g: 'shield2', bevel: 4 }); S.ell(sc[0], sc[1], 3.2, 3.2, 'gold', { g: 'shield3', bevel: 1.5 });
+  for (const [x, y] of [[14, 45], [14, 63], [5, 54], [23, 54]]) S.dot(x + r[0], y + r[1], '#d6dbe6');
+  S.line([[22, 38], add([17, 46], r)], 5, 'mail', { g: 'rarm', light: -0.4 });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.poly([[20, 14], [24, 6], [32, 3], [41, 7], [43, 15], [38, 13], [26, 13], [24, 20], [20, 22]], 'hairBrown', { g: 'hbk', bevel: 3 });
   S.ell(32, 17, 10, 11, 'skin', { g: 'head', bevel: 6 });
   S.poly([[22, 13], [25, 6], [32, 4], [40, 7], [42, 13], [39, 11], [34, 9], [29, 11], [25, 14]], 'hairBrown', { g: 'head', bevel: 2.5 });
-  eyes(S, 35, 16); brow(S, 34, 14, '#3a281e'); S.dot(42, 20, '#c98a62'); S.dot(38, 23, '#a5604a'); S.dot(39, 23, '#a5604a');
+  eyes(S, 35, 16, P.blink); brow(S, 34, 14, '#3a281e'); S.dot(42, 20, '#c98a62'); S.dot(38, 23, '#a5604a'); S.dot(39, 23, '#a5604a');
   for (let x = 28; x <= 41; x += 2) { S.dot(x, 25, '#7a5234'); if (x > 30) S.dot(x, 24, '#7a5234'); }
   return S.finish();
 }
-function sam(): PixImg {
+function sam(P: Pose): PixImg {
+  const { up, lean, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.ell(18, 66, 10.5, 12.5, 'leather', { g: 'pack', bevel: 5 }); S.ell(18, 52, 9.5, 5, 'tan', { g: 'roll', bevel: 3 }); S.ell(12, 72, 4.5, 4.5, 'steelDark', { g: 'pot', bevel: 2 });
-  S.dot(18, 56, '#3a2a1c'); S.dot(14, 62, '#3a2a1c');
-  S.line([[24, 62], [20, 70]], 5, 'jacketGreen', { g: 'rarm', light: -0.5 }); S.ell(20, 72, 3, 3, 'skin', { g: 'rarm' });
   S.poly([[26, 71], [31, 71], [31, 79], [26, 79]], 'tan', { g: 'legA' }); S.poly([[34, 71], [39, 71], [40, 79], [34, 79]], 'tan', { g: 'legB' });
   S.ell(28, 81, 7, 3, 'skin', { g: 'footA', bevel: 2 }); S.ell(41, 81, 7, 3, 'skin', { g: 'footB', bevel: 2 });
   for (const x of [24, 27, 30, 38, 41, 44]) S.dot(x, 80, '#a8714f');
+  S.at(lean, 8 + up);
+  S.ell(18, 66, 10.5, 12.5, 'leather', { g: 'pack', bevel: 5 }); S.ell(18, 52, 9.5, 5, 'tan', { g: 'roll', bevel: 3 }); S.ell(12, 72, 4.5, 4.5, 'steelDark', { g: 'pot', bevel: 2 });
+  S.dot(18, 56, '#3a2a1c'); S.dot(14, 62, '#3a2a1c');
+  const rh = add([20, 72], r);
+  S.line([[24, 62], mid([24, 62], rh, 0.9)], 5, 'jacketGreen', { g: 'rarm', light: -0.5 }); S.ell(rh[0], rh[1], 3, 3, 'skin', { g: 'rarm' });
   S.poly([[24, 58], [40, 58], [41, 74], [23, 74]], 'jacketGreen', { g: 'torso', bevel: 4, grad: 0.4 });
   S.poly([[24, 68], [40, 68], [40, 71], [24, 71]], 'leatherDark', { g: 'torso', flat: true, tone: 1.8 }); S.rect(31, 68, 3, 3, 'gold', { g: 'torso', flat: true, tone: 3 });
-  S.line([[40, 61], [48, 57]], 5.5, 'jacketGreen', { g: 'farm' }); S.ell(50, 57, 3.4, 3.4, 'skin', { g: 'farm' });
-  S.line([[51, 56], [58, 47]], 2.6, 'wood', { g: 'handle', bevel: 1.2 }); S.ell(60, 43, 7, 5.5, 'steelDark', { g: 'pan', bevel: 3.5 }); S.ell(59, 42, 4, 2.5, 'steel', { g: 'pan2', bevel: 1.5 });
+  const H = add([50, 57], h);
+  S.line([[40, 61], mid([40, 61], H, 0.9)], 5.5, 'jacketGreen', { g: 'farm' }); S.ell(H[0], H[1], 3.4, 3.4, 'skin', { g: 'farm' });
+  const pan = add([60, 43], t);
+  S.line([add(H, [1, -1]), mid(add(H, [1, -1]), pan, 0.85)], 2.6, 'wood', { g: 'handle', bevel: 1.2 }); S.ell(pan[0], pan[1], 7, 5.5, 'steelDark', { g: 'pan', bevel: 3.5 }); S.ell(pan[0] - 1, pan[1] - 1, 4, 2.5, 'steel', { g: 'pan2', bevel: 1.5 });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.ell(32, 46, 11.5, 12, 'skin', { g: 'head', bevel: 6 });
   for (const [x, y] of [[21, 47], [21, 41], [24, 36], [29, 33], [35, 33], [40, 36], [43, 41]]) S.ell(x, y, 4.8, 4.8, 'hairSam', { g: 'head', bevel: 2.5 });
   S.ell(32, 46, 10.5, 11, 'skin', { g: 'head', bevel: 6 });
   S.poly([[24, 40], [28, 36], [34, 35], [40, 38], [42, 42], [36, 40], [29, 41]], 'hairSam', { g: 'head', bevel: 2 });
-  eyes(S, 35, 46, '#3a2a1c'); S.dot(36, 51, '#e48a70'); S.dot(37, 51, '#e48a70'); S.dot(41, 50, '#e48a70'); S.dot(42, 49, '#cf936b'); S.dot(38, 53, '#a5604a'); S.dot(39, 53, '#a5604a');
+  eyes(S, 35, 46, P.blink, '#3a2a1c'); S.dot(36, 51, '#e48a70'); S.dot(37, 51, '#e48a70'); S.dot(41, 50, '#e48a70'); S.dot(42, 49, '#cf936b'); S.dot(38, 53, '#a5604a'); S.dot(39, 53, '#a5604a');
   S.poly([[24, 46], [20, 42], [26, 45]], 'skin', { g: 'head' });
   return S.finish();
 }
-function gandalf(): PixImg {
+function gandalf(P: Pose): PixImg {
+  const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
-  S.line([[24, 50], [18, 64]], 7, 'robe', { g: 'rarm', light: -0.6 }); S.ell(18, 66, 3.2, 3.2, 'skin', { g: 'rarm' });
-  S.poly([[21, 46], [46, 46], [53, 82], [13, 82]], 'robe', { g: 'robe', bevel: 7, grad: 0.7, fold: { amp: 0.55, period: 6, angle: 1.5 } });
+  S.poly(sway([[21, 46], [46, 46], [53, 82], [13, 82]], cape, 50), 'robe', { g: 'robe', bevel: 7, grad: 0.7, fold: { amp: 0.55, period: 6, angle: 1.5 } });
   S.poly([[22, 80], [32, 80], [32, 84], [19, 84]], 'leatherDark', { g: 'feetA' }); S.poly([[34, 80], [45, 80], [48, 84], [34, 84]], 'leatherDark', { g: 'feetB' });
-  S.line([[42, 50], [53, 46]], 7.5, 'robe', { g: 'farm', fold: { amp: 0.4, period: 5, angle: 0.4 } }); S.ell(55, 45, 3.4, 3.4, 'skin', { g: 'farm' });
-  S.line([[57, 20], [58, 86]], 3.4, 'wood', { g: 'staff', bevel: 1.7 });
-  S.poly([[52, 22], [54, 14], [57, 18], [60, 12], [62, 22]], 'wood', { g: 'staff' });
-  S.ell(57, 14, 6.4, 6.4, 'cyan', { g: 'orb', flat: true, tone: 3.1, noLine: true }); S.ell(55.5, 12.5, 2.4, 2.4, 'cyan', { g: 'orb', flat: true, tone: 4, noLine: true });
+  S.at(lean, 8 + up);
+  const rh = add([18, 66], r);
+  S.line([[24, 50], mid([24, 50], rh, 0.9)], 7, 'robe', { g: 'rarm', light: -0.6 }); S.ell(rh[0], rh[1], 3.2, 3.2, 'skin', { g: 'rarm' });
+  const H = add([55, 45], h);
+  S.line([[42, 50], mid([42, 50], H, 0.9)], 7.5, 'robe', { g: 'farm', fold: { amp: 0.4, period: 5, angle: 0.4 } }); S.ell(H[0], H[1], 3.4, 3.4, 'skin', { g: 'farm' });
+  S.at(lean, 8);
+  const top = add([57, 20], [h[0] + t[0], h[1] + t[1]]);
+  S.line([top, [58 + lean * 0.5, 86]], 3.4, 'wood', { g: 'staff', bevel: 1.7 });
+  S.poly([[top[0] - 5, top[1] + 2], [top[0] - 3, top[1] - 6], [top[0], top[1] - 2], [top[0] + 3, top[1] - 8], [top[0] + 5, top[1] + 2]], 'wood', { g: 'staff' });
+  S.ell(top[0], top[1] - 6, 6.4, 6.4, 'cyan', { g: 'orb', flat: true, tone: P.open ? 3.9 : 3.1, noLine: true }); S.ell(top[0] - 1.5, top[1] - 7.5, 2.4, 2.4, 'cyan', { g: 'orb', flat: true, tone: 4, noLine: true });
+  S.at(lean + hd[0], 8 + up + hd[1]);
   S.ell(33, 36, 8.5, 8.5, 'skin', { g: 'head', bevel: 5 });
   S.poly([[24, 40], [42, 40], [45, 52], [41, 68], [33, 78], [25, 68], [22, 52]], 'hairWhite', { g: 'beard', bevel: 6, fold: { amp: 0.4, period: 4, angle: 1.45 } });
   S.ell(34, 41, 6.5, 2.5, 'hairWhite', { g: 'beard', bevel: 2 });
   S.poly([[20, 28], [26, 22], [30, 12], [35, 0], [42, -4], [42, 10], [43, 20], [47, 26], [48, 30], [20, 30]], 'hat', { g: 'hat', bevel: 5, fold: { amp: 0.3, period: 6, angle: 0.6 } });
   S.ell(33, 29, 17, 4, 'hat', { g: 'brim', bevel: 2.5 });
   S.rect(25, 26, 16, 2, 'steelDark', { g: 'brim', flat: true, tone: 1.8 });
-  eyes(S, 36, 35); S.dot(35, 34, '#d9d6de'); S.dot(36, 34, '#d9d6de'); S.dot(41, 34, '#d9d6de'); S.dot(42, 39, '#d49670');
+  eyes(S, 36, 35, P.blink); S.dot(35, 34, '#d9d6de'); S.dot(36, 34, '#d9d6de'); S.dot(41, 34, '#d9d6de'); S.dot(42, 39, '#d49670');
   return S.finish();
 }
 
-const BUILD: Record<HeroId, () => PixImg> = { aragorn, gimli, frodo, legolas, boromir, sam, gandalf };
+const BUILD: Record<HeroId, (P: Pose) => PixImg> = { aragorn, gimli, frodo, legolas, boromir, sam, gandalf };
 export const HERO_W = 72;
 export const HERO_H = 92;
 /** where a hero's soles sit in the sprite (canvas pixels from the top) */
 export const HERO_FOOT = 90;
-const cache = new Map<HeroId, HTMLCanvasElement>();
-export function paintHeroPixel(id: HeroId): HTMLCanvasElement {
-  let c = cache.get(id);
-  if (!c) { c = toCanvas(BUILD[id]()); cache.set(id, c); }
+
+/** per-hero tweaks of the shared poses: archers draw instead of swinging, wizards raise the staff, and so on */
+function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
+  const base = HERO_ANIMS[anim][n];
+  if (id === 'legolas') {
+    if (anim === 'wind' || anim === 'cast') return { ...base, hand: [1, -1], tip: [0, 0], rhand: [anim === 'wind' ? -6 : -4 - n * 2, 0], lean: base.lean };
+    if (anim === 'strike') return { ...base, hand: [2, 0], rhand: [3, 0], tip: [0, 0] };
+    return { ...base, tip: [0, 0], hand: base.hand ?? [0, 0], rhand: anim === 'win' ? [2, -10] : base.rhand };
+  }
+  if (id === 'gandalf') {
+    if (anim === 'wind') return { ...base, hand: [-1, -4], tip: [-1, -6], open: false };
+    if (anim === 'strike' || anim === 'cast') return { ...base, hand: [3, -7 - n * 2], tip: [3, -6 - n * 2], open: true, rhand: [2, -8] };
+    if (anim === 'win') return { ...base, hand: [2, -10], tip: [1, -9], open: true };
+    return { ...base, tip: [0, 0], hand: base.hand };
+  }
+  if (id === 'frodo' && anim === 'cast') return { ...base, hand: [2, -6], tip: [4, -10] };
+  if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? [10, 24] : [12, 14] };
+  return base;
+}
+
+const cache = new Map<string, { color: HTMLCanvasElement; normal: HTMLCanvasElement }>();
+function built(id: HeroId, anim: HeroAnim = 'idle', n = 0): { color: HTMLCanvasElement; normal: HTMLCanvasElement } {
+  const key = `${id}:${anim}:${n}`;
+  let c = cache.get(key);
+  if (!c) { const img = BUILD[id](poseFor(id, anim, n)); c = { color: toCanvas(img), normal: toCanvas(img, img.normal) }; cache.set(key, c); }
   return c;
 }
-export function heroImage(id: HeroId): PixImg { return BUILD[id](); }
+export function paintHeroPixel(id: HeroId): HTMLCanvasElement { return built(id).color; }
+/** the matching tangent-space normal map, for dynamic lighting */
+export function paintHeroNormal(id: HeroId): HTMLCanvasElement { return built(id).normal; }
+/** one frame of an animation: colour + normal map */
+export function heroFrame(id: HeroId, anim: HeroAnim, n: number): { color: HTMLCanvasElement; normal: HTMLCanvasElement } { return built(id, anim, n % HERO_ANIMS[anim].length); }
+export function heroImage(id: HeroId): PixImg { return BUILD[id](poseFor(id, 'idle', 0)); }

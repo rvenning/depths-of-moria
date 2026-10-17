@@ -1,6 +1,6 @@
 import { CHAPTER_BY_N } from '../content/chapters.ts';
 import { alpha, ctx2d, glow, makeCanvas, mix, rand, shade, stoneTexture, type Ctx } from './draw.ts';
-import { padCanvas, pixelize } from './pixel/pixelize.ts';
+import { depthBlur, padCanvas, pixelize } from './pixel/pixelize.ts';
 
 export const BG_W = 960;
 export const BG_H = 480;
@@ -296,8 +296,11 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   const nw = BG_W / PIX, nh = BG_H / PIX;
   const px = (cv: HTMLCanvasElement, o: { levels: number; dither: number; alphaDither?: boolean }): HTMLCanvasElement => padCanvas(pixelize(cv, { outW: nw, outH: nh, ...o }), BG_PAD);
   const layers: BgLayers = {
-    far: px(v.far, { levels: 9, dither: 0.9 }), mid: px(v.mid, { levels: 7, dither: 0.6, alphaDither: true }),
-    floor: px(v.floor, { levels: 8, dither: 0.8 }), near: px(v.near, { levels: 6, dither: 0.6, alphaDither: true }),
+    // HD-2D depth of field: the far wall is soft, every layer defocuses toward the top and bottom edges, the foreground frame is blurred
+    far: depthBlur(px(v.far, { levels: 9, dither: 0.9 }), { all: 1.3, edge: 2.6 }),
+    mid: depthBlur(px(v.mid, { levels: 7, dither: 0.6, alphaDither: true }), { all: 0.4, edge: 2.2 }),
+    floor: depthBlur(px(v.floor, { levels: 8, dither: 0.8 }), { edge: 2.4, band: [0.22, 0.6] }),
+    near: depthBlur(px(v.near, { levels: 6, dither: 0.6, alphaDither: true }), { all: 1.4 }),
     lights: v.lights, theme: v.theme, variant: v.variant, particles: v.particles,
   };
   pcache.set(key, layers); porder.push(key);

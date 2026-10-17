@@ -1,7 +1,11 @@
 import Phaser from 'phaser';
 import { BG_H, BG_PAD, BG_W, HORIZON, PIX, type BgLayers } from '../art/backgrounds.ts';
-import { CREATURE_FOOT, paintCreature } from '../art/creatures.ts';
-import { HERO_FOOT, HERO_H, paintHero } from '../art/heroes.ts';
+import { CREATURE_FOOT, paintCreature, paintCreatureNormal } from '../art/creatures.ts';
+import { HERO_FOOT, HERO_H } from '../art/heroes.ts';
+import { HERO_ANIMS, heroFrame, type HeroAnim } from '../art/pixel/heroSprites.ts';
+import { breathe, leanTop, normalMapOf } from '../art/pixel/pixelize.ts';
+import type { HeroId } from '../content/schema.ts';
+import { playVfx, registerVfx, type FxKind } from './vfx.ts';
 import { ENEMIES } from '../content/enemies.ts';
 import { HEROES } from '../content/heroes.ts';
 import { STATUSES } from '../content/statuses.ts';
@@ -14,6 +18,12 @@ export const STAGE_H = BG_H;
 const FONT = "'Jersey 15', monospace";
 /** one art pixel is PIX stage pixels, so every sprite is shown at exactly PIX times its native size */
 const ZOOM = PIX;
+
+/** the ambient light of each chapter's theme (what the unlit stone looks like) */
+const AMBIENT: Record<string, number> = {
+  gate: 0xc8c8e8, gallery: 0xb8d0e0, forge: 0xe0c0b0, stair: 0xc0c0d0, halls: 0xe0d4b0,
+  flooded: 0xa8d4e0, archives: 0xc8b8e8, chasm: 0xa8b0d8, flame: 0xe8b8a0, bridge: 0xe0b0a0,
+};
 
 const HERO_COLOR = '#9ec3ff';
 const ENEMY_COLOR = '#ffb09a';
@@ -34,6 +44,11 @@ interface Node {
   hp: number; maxHp: number; shownHp: number;
   side: 'hero' | 'enemy';
   idle?: Phaser.Tweens.Tween;
+  /** sprite animation: the current clip, when a one-shot clip ends, a per-unit phase so a party does not breathe in unison, the texture on show */
+  anim: HeroAnim;
+  hold: number;
+  phase: number;
+  texKey: string;
   alive: boolean;
   facing: number;
 }
@@ -44,6 +59,10 @@ export interface SceneInit {
   enemies: UnitView[];
   reduced: boolean;
   icons: Record<string, HTMLImageElement>;
+  /** 'hd': dynamic lights, bloom, tilt-shift depth of field; 'low': flat pixel art (for slow GPUs) */
+  quality?: 'hd' | 'low';
+  /** let the scene drop to 'low' by itself when the frame rate is poor */
+  autoQuality?: boolean;
 }
 
 export interface SceneHooks { onLog?: (text: string, tone: 'h' | 'e' | 'w' | 'g' | '') => void }
@@ -76,11 +95,18 @@ export class BattleScene extends Phaser.Scene {
   private driftT = 0;
   private lowSaid = new Set<number>();
   private lastQuote = 0;
+  /** HD-2D mode: real lights with normal maps, bloom and a tilt-shift camera */
+  hd = true;
+  autoQuality = false;
+  private slowFor = 0;
+  private hdReady = false;
+  private lightObjs: { light: Phaser.GameObjects.Light; base: number; speed: number; flick: number; phase: number }[] = [];
 
   constructor() { super('battle'); }
 
   create(): void {
     this.makeTextures();
+    registerVfx(this);
     this.fxLayer = this.add.container(0, 0).setDepth(10000);
     this.ready = true;
     if (this.pendingInit) this.applyInit(this.pendingInit);
@@ -100,6 +126,7 @@ export class BattleScene extends Phaser.Scene {
     mk('ringtex', 32, 32, (c) => px(c, '#fff', ['..........########..........', '.......###........###.......', '.....##..............##.....']));
     mk('spark', 9, 9, (c) => px(c, '#fff', ['....#....', '....#....', '...###...', '.#######.', '#########', '.#######.', '...###...', '....#....', '....#....']));
     mk('slash', 16, 16, (c) => px(c, '#fff', ['.............##.', '...........####.', '.........####...', '.......####.....', '......###.......', '.....###........', '....###.........', '....###.........', '....###.........', '....###.........', '.....###........', '......###.......', '.......####.....', '.........####...', '...........####.', '.............##.']));
+    mk('arrow', 11, 7, (c) => { px(c, '#0b0714', ['ooooooooooo', 'o#########o', '.o#######o.', '..o#####o..', '...o###o...', '....o#o....', '.....o.....'].map((r) => r.replace(/[^o]/g, '.').replace(/o/g, '#'))); px(c, '#ffe08a', ['...........', '.#########.', '..#######..', '...#####...', '....###....', '.....#.....', '...........']); });
     mk('orb', 11, 11, (c) => { px(c, '#fff', ['...#####...', '..#######..', '.#########.', '###########', '###########', '###########', '###########', '###########', '.#########.', '..#######..', '...#####...']); c.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 6; i++) c.fillRect(2 + i, 8 - (i >> 1), 1, 1); });
     mk('streak', 24, 5, (c) => { px(c, '#fff', ['.......................#', '.....##################', '.....###################', '.....##################', '.......................#']); c.fillStyle = 'rgba(255,255,255,0.45)'; for (let x = 0; x < 5; x++) c.fillRect(x, 2, 1, 1); });
   }
@@ -142,12 +169,99 @@ export class BattleScene extends Phaser.Scene {
   private applyInit(data: SceneInit): void {
     this.pendingInit = undefined;
     this.reduced = data.reduced;
+    this.autoQuality = !!data.autoQuality;
+    this.introDone = false;
+    this.setQuality(data.quality ?? 'hd');
     for (const [k, img] of Object.entries(data.icons)) if (!this.textures.exists(k)) this.textures.addImage(k, img);
     this.buildBackground(data.bg);
+    if (this.hd) this.lights.setAmbientColor(AMBIENT[data.bg.theme] ?? 0xc8c8e8);
     for (const n of this.nodes.values()) { n.idle?.stop(); n.c.destroy(); }
     this.nodes.clear(); this.lowSaid.clear();
     for (const u of data.heroes) this.addUnit(u, false);
     for (const u of data.enemies) this.addUnit(u, false);
+  }
+
+  private introDone = false;
+  private marker?: Phaser.GameObjects.Image;
+  private markerTween?: Phaser.Tweens.Tween;
+  /** a gold arrow bobbing over whoever's turn it is */
+  private markActor(n?: Node): void {
+    this.markerTween?.stop(); this.markerTween = undefined;
+    if (!n || this.reduced) { this.marker?.setVisible(false); return; }
+    if (!this.marker) this.marker = this.add.image(0, 0, 'arrow').setScale(ZOOM).setDepth(9400);
+    const y = Math.round((n.c.y - n.sprite.displayHeight * this.footOf(n.view) - 26) / ZOOM) * ZOOM;
+    this.marker.setVisible(true).setPosition(Math.round(n.c.x / ZOOM) * ZOOM, y);
+    this.markerTween = this.tweens.add({ targets: this.marker, y: y - 6, duration: 260 / this.speed, yoyo: true, repeat: -1, ease: 'stepped', easeParams: [2] });
+  }
+
+  /** film-style black bars sliding in and out (boss introductions, the ending) */
+  private bars?: Phaser.GameObjects.Rectangle[];
+  private letterbox(on: boolean, ms = 360): Promise<void> {
+    if (!this.bars) {
+      const mkb = (y: number) => this.add.rectangle(STAGE_W / 2, y, STAGE_W + 8, 60, 0x05030a, 1).setDepth(9900).setScale(1, 0);
+      this.bars = [mkb(0), mkb(STAGE_H)];
+      this.bars[0].setOrigin(0.5, 0); this.bars[1].setOrigin(0.5, 1);
+    }
+    const target = on ? 1 : 0;
+    return new Promise((res) => {
+      let done = 0; const fin = () => { if (++done === 2) res(); };
+      for (const b of this.bars as Phaser.GameObjects.Rectangle[]) this.tweens.add({ targets: b, scaleY: target, duration: ms / this.speed, ease: 'quad.out', onComplete: fin });
+    });
+  }
+
+  /** the opening of a fight: a boss gets a letterboxed name card and a slow push-in; everything else just a short banner */
+  private async introFor(enemies: UnitView[]): Promise<void> {
+    const boss = enemies.find((e) => e.tier === 'boss');
+    if (!boss || this.reduced) return;
+    const cam = this.cameras.main;
+    void this.letterbox(true);
+    this.tweens.add({ targets: cam, zoom: 1.07, duration: 900 / this.speed, ease: 'sine.inOut' });
+    const t = this.add.text(STAGE_W / 2, STAGE_H / 2 - 150, boss.name.toUpperCase(), { fontFamily: FONT, fontSize: '46px', color: '#ffd9a0', stroke: '#2a0d06', strokeThickness: 8, align: 'center' }).setOrigin(0.5).setDepth(9950).setAlpha(0);
+    const sub = this.add.text(STAGE_W / 2, STAGE_H / 2 - 108, 'chapter boss', { fontFamily: FONT, fontSize: '22px', color: '#ffb36a', stroke: '#0b0714', strokeThickness: 5 }).setOrigin(0.5).setDepth(9950).setAlpha(0);
+    this.tweens.add({ targets: [t, sub], alpha: 1, duration: 420 / this.speed, ease: 'stepped', easeParams: [5] });
+    this.shake(0.006, 380);
+    await this.wait(1500);
+    this.tweens.add({ targets: [t, sub], alpha: 0, duration: 280 / this.speed, onComplete: () => { t.destroy(); sub.destroy(); } });
+    this.tweens.add({ targets: cam, zoom: 1, duration: 420 / this.speed, ease: 'sine.inOut' });
+    await this.letterbox(false);
+  }
+
+  /** a shower of gold sparks for a won fight */
+  private confetti(): void {
+    if (this.reduced) return;
+    const e = this.add.particles(STAGE_W / 2, -8, 'spark', { x: { min: -440, max: 440 }, speedY: { min: 60, max: 170 }, speedX: { min: -25, max: 25 }, lifespan: 2400, scale: ZOOM, alpha: { start: 1, end: 0 }, tint: [0xffe08a, 0xffffff, 0x9be8b0, 0xffb36a], frequency: 35, quantity: 2 }).setDepth(9600);
+    this.time.delayedCall(1700 / this.speed, () => { e.stop(); this.time.delayedCall(2600, () => e.destroy()); });
+  }
+
+  /** switch the HD-2D layer on or off (lights, bloom, depth of field) */
+  setQuality(q: 'hd' | 'low'): void {
+    const want = q === 'hd';
+    if (want === this.hd && (this.hdReady || !want)) return;
+    this.hd = want;
+    const cam = this.cameras.main;
+    if (want) {
+      this.lights.enable().setAmbientColor(0xc8c8e8);
+      if (!this.hdReady) {
+        const pf = cam.filters.internal.addParallelFilters();
+        pf.top.addThreshold(0.62, 0.98); pf.top.addBlur(1, 4, 4, 1.3);
+        pf.blend.blendMode = Phaser.BlendModes.ADD; pf.blend.amount = 0.55;
+        cam.filters.external.addVignette(0.5, 0.52, 0.9, 0.5);
+        this.hdReady = true;
+      } else { cam.filters.internal.list.forEach((x) => x.setActive(true)); cam.filters.external.list.forEach((x) => x.setActive(true)); }
+    } else {
+      this.lights.disable();
+      cam.filters.internal.list.forEach((x) => x.setActive(false)); cam.filters.external.list.forEach((x) => x.setActive(false));
+    }
+    for (const l of this.layers) l.setLighting(want);
+    for (const n of this.nodes.values()) n.sprite.setLighting(want);
+  }
+
+  /** a short coloured flash of light where something happens (a hit, a spell) */
+  flashLight(x: number, y: number, color: number, radius = 150, intensity = 2.4, ms = 260): void {
+    if (!this.hd || this.reduced) return;
+    const l = this.lights.addLight(x, y, radius, color, intensity, radius * 0.6);
+    const o = { v: intensity };
+    this.tweens.add({ targets: o, v: 0, duration: ms / this.speed, ease: 'quad.out', onUpdate: () => { l.intensity = o.v; }, onComplete: () => { this.lights.removeLight(l); } });
   }
 
   private bgKeys: string[] = [];
@@ -158,6 +272,8 @@ export class BattleScene extends Phaser.Scene {
     for (const k of this.bgKeys) if (!keep.has(k) && this.textures.exists(k)) this.textures.remove(k);
     this.bgKeys = [...keep];
     for (const l of this.bgLights) l.img.destroy();
+    for (const l of this.lightObjs) this.lights.removeLight(l.light);
+    this.lightObjs = [];
     for (const e of this.emitters) e.destroy();
     this.layers = []; this.bgLights = []; this.emitters = [];
     const add = (name: string, cv: HTMLCanvasElement, depth: number) => {
@@ -165,6 +281,8 @@ export class BattleScene extends Phaser.Scene {
       if (!this.textures.exists(key)) this.textures.addCanvas(key, cv);
       // the layer is BG_PAD native pixels larger on every side, so showing it at exactly ZOOM keeps every pixel square
       const img = this.add.image(STAGE_W / 2, STAGE_H / 2, key).setScale(ZOOM).setDepth(depth);
+      if (name !== 'near' && !this.textures.get(key).dataSource.length) this.textures.get(key).setDataSource(normalMapOf(cv, 1.8));
+      if (name !== 'near') img.setLighting(this.hd);
       this.layers.push(img);
       return img;
     };
@@ -177,6 +295,9 @@ export class BattleScene extends Phaser.Scene {
       const img = this.add.image(x, y, this.glowTexture(R)).setScale(ZOOM).setBlendMode(Phaser.BlendModes.ADD).setDepth(-10).setTint(Phaser.Display.Color.HexStringToColor(this.hexOf(l.color)).color);
       img.setAlpha(0.4);
       this.bgLights.push({ img, base: 0.4, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
+      const col = Phaser.Display.Color.HexStringToColor(this.hexOf(l.color));
+      const light = this.lights.addLight(x, y, l.r * 2.7, col.color, 1.8, l.r * 2.7 * 0.6);
+      this.lightObjs.push({ light, base: 1.8, speed: 0.004 + Math.random() * 0.004, flick: l.flicker, phase: Math.random() * 100 });
     }
     // ambient particles: single pixels drifting
     if (!this.reduced) {
@@ -205,15 +326,50 @@ export class BattleScene extends Phaser.Scene {
     return `#${m.slice(0, 3).map((x) => Number(x).toString(16).padStart(2, '0')).join('')}`;
   }
 
-  private textureFor(u: UnitView): string {
-    if (u.side === 'hero' && u.heroId) {
-      const key = `h:${u.heroId}`;
-      if (!this.textures.exists(key)) this.textures.addCanvas(key, paintHero(u.heroId));
-      return key;
-    }
-    const key = `e:${u.id}`;
-    if (!this.textures.exists(key)) this.textures.addCanvas(key, paintCreature(ENEMIES[u.id]));
+  /** the texture for one frame of a hero clip (with its normal map for the lights) */
+  private heroTex(id: HeroId, anim: HeroAnim, i: number): string {
+    const key = `h:${id}:${anim}:${i}`;
+    if (!this.textures.exists(key)) { const f = heroFrame(id, anim, i); const t = this.textures.addCanvas(key, f.color); t?.setDataSource(f.normal); }
     return key;
+  }
+
+  /** an enemy's frames: as painted, breathing in, winding up, lunging (they face left, so forward is -x) and flinching */
+  private enemyTex(id: string, v: 'idle0' | 'idle1' | 'wind' | 'strike' | 'hurt'): string {
+    const key = v === 'idle0' ? `e:${id}` : `e:${id}:${v}`;
+    if (!this.textures.exists(key)) {
+      const def = ENEMIES[id], base = paintCreature(def);
+      const cv = v === 'idle0' ? base : v === 'idle1' ? breathe(base) : v === 'wind' ? leanTop(base, 3, -1) : v === 'strike' ? leanTop(base, -5, 1) : leanTop(base, 4, 0);
+      const t = this.textures.addCanvas(key, cv); t?.setDataSource(v === 'idle0' ? paintCreatureNormal(def) : normalMapOf(cv, 1.4));
+    }
+    return key;
+  }
+
+  private textureFor(u: UnitView): string {
+    if (u.side === 'hero' && u.heroId) return this.heroTex(u.heroId, 'idle', 0);
+    return this.enemyTex(u.id, 'idle0');
+  }
+
+  /** play a clip once for `ms` (an enemy has wind-up, strike and hurt frames; its cast is a wind-up) */
+  private setAnim(n: Node, anim: HeroAnim, ms: number): void {
+    if (!n.alive) return;
+    if (n.side === 'enemy') { if (anim === 'win' || anim === 'idle') return; if (anim === 'cast') anim = 'wind'; }
+    n.anim = anim; n.hold = this.time.now + ms / this.speed;
+  }
+
+  private stepAnim(n: Node, now: number): void {
+    let key: string;
+    if (n.side === 'hero' && n.view.heroId) {
+      if (n.anim !== 'idle' && n.anim !== 'win' && now > n.hold) n.anim = 'idle';
+      const len = HERO_ANIMS[n.anim].length;
+      const per = n.anim === 'idle' ? 260 : n.anim === 'win' ? 300 : 110;
+      const i = this.reduced && n.anim === 'idle' ? 0 : Math.floor((now + n.phase) / per) % len;
+      key = this.heroTex(n.view.heroId, n.anim, i);
+    } else {
+      if (n.anim !== 'idle' && now > n.hold) n.anim = 'idle';
+      const pose = n.anim === 'wind' || n.anim === 'strike' || n.anim === 'hurt' ? n.anim : null;
+      key = this.enemyTex(n.view.id, pose ?? (this.reduced ? 'idle0' : [0, 1, 1, 0][Math.floor((now + n.phase) / 340) % 4] ? 'idle1' : 'idle0'));
+    }
+    if (key !== n.texKey) { n.sprite.setTexture(key); n.texKey = key; }
   }
 
   /** sprites are always shown at exactly ZOOM; a bigger monster is a bigger native sprite (see paintCreature) */
@@ -225,7 +381,7 @@ export class BattleScene extends Phaser.Scene {
     const pos = slotPos(u.side, u.slot, u.scale);
     const facing = u.side === 'hero' ? 1 : -1;
     const c = this.add.container(pos.x, pos.y);
-    const sprite = this.add.image(0, 0, this.textureFor(u)).setOrigin(0.5, this.footOf(u)).setScale(scale);
+    const sprite = this.add.image(0, 0, this.textureFor(u)).setOrigin(0.5, this.footOf(u)).setScale(scale).setLighting(this.hd);
     const wNative = Math.round(sprite.width * 0.7);
     const shadow = this.add.image(0, -ZOOM, this.shadowTexture(wNative)).setScale(ZOOM).setAlpha(0.8);
     const ring = this.add.ellipse(0, -2, wNative * ZOOM * 1.1, wNative * ZOOM * 0.22).setStrokeStyle(2, 0xffe08a, 1).setAlpha(0);
@@ -240,13 +396,10 @@ export class BattleScene extends Phaser.Scene {
     const node: Node = {
       uid: u.uid, view: u, c, sprite, shadow, ring, bar, hpText, name, icons, statuses: new Map(), baseX: pos.x, baseY: pos.y, baseScale: scale,
       hp: u.hp, maxHp: u.maxHp, shownHp: u.hp, side: u.side, alive: true, facing,
+      anim: 'idle', hold: 0, phase: Math.random() * 2000, texKey: '',
     };
     this.nodes.set(u.uid, node);
     this.drawBar(node, w);
-    if (!this.reduced) {
-      // a two-pixel breath: whole-pixel steps keep the sprite crisp
-      node.idle = this.tweens.add({ targets: sprite, y: -ZOOM, duration: 700 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'stepped', easeParams: [2], delay: Math.random() * 600 });
-    }
     if (animate) {
       c.setAlpha(0);
       this.tweens.add({ targets: c, alpha: 1, duration: 300 / this.speed, ease: 'stepped', easeParams: [4] });
@@ -302,15 +455,46 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(700, () => e.destroy());
   }
 
-  /** a blade arc or a spark burst where a hit lands, in whole-pixel steps */
-  private hitFx(n: Node, kind: string, crit: boolean): void {
+  /** play an effect clip at a unit (its middle, or its feet) */
+  private vfx(kind: FxKind, n: Node, o: { tint?: number; scale?: number; feet?: boolean; angle?: number; flipX?: boolean; dx?: number; dy?: number } = {}): void {
+    if (this.reduced) return;
+    const x = Math.round((n.c.x + (o.dx ?? 0)) / ZOOM) * ZOOM;
+    const y = Math.round((o.feet ? n.c.y : this.pos(n).y) / ZOOM) * ZOOM + (o.dy ?? 0);
+    void playVfx(this, kind, x, y, { tint: o.tint, scale: o.scale, angle: o.angle, flipX: o.flipX, speed: this.speed / 2, anchorBottom: false });
+  }
+
+  /** what a hit looks like, by the skill's effect type: fire, shadow and poison each have their own animation */
+  private hitFx(n: Node, kind: string, crit: boolean, fx = ''): void {
     if (this.reduced || kind === 'heal') return;
+    const big = crit ? 1.35 : 1;
+    const dir = n.side === 'hero' ? 1 : -1;
+    const col = this.fxColor(fx);
+    switch (fx) {
+      case 'fire': this.vfx('flame', n, { scale: big, dy: -8 }); this.vfx('impact', n, { tint: 0xffb060, scale: big }); break;
+      case 'light': this.vfx('rays', n, { tint: 0xfff0a8, scale: big }); break;
+      case 'shield': this.vfx('shield', n, { tint: 0x9ec8ff, scale: big }); break;
+      case 'wave': this.vfx('burst', n, { tint: 0x88b8ff, scale: big }); break;
+      case 'water': this.vfx('ice', n, { scale: big, dy: -6 }); this.vfx('burst', n, { tint: 0xa8d8ff, scale: 0.8 }); break;
+      case 'shadow': case 'curse': this.vfx('shadow', n, { scale: big, dy: -6 }); break;
+      case 'poison': this.vfx('poison', n, { scale: big, dy: -4 }); break;
+      case 'buff': case 'rally': case 'horn': case 'drum': this.vfx('aura', n, { tint: 0xffe08a, feet: true, dy: -4 }); break;
+      case 'arrow': case 'volley': case 'pierce': this.vfx('impact', n, { tint: 0xf0e8d0, scale: 0.8 * big, dx: -6 * dir }); break;
+      case 'smash': case 'slam': this.vfx('impact', n, { scale: 1.3 * big }); this.vfx('smoke', n, { feet: true, dy: -10 }); break;
+      case 'bite': this.vfx('slash', n, { scale: 0.8 * big, angle: 40 * dir }); this.vfx('slash', n, { scale: 0.8 * big, angle: -40 * dir, flipX: true }); break;
+      case 'whip': this.vfx('slash', n, { scale: 1.3 * big, angle: 100 * dir }); break;
+      default:
+        if (kind === 'magic' || kind === 'dot') this.vfx('burst', n, { tint: 0xb8d0ff, scale: 0.7 * big });
+        else this.vfx('slash', n, { scale: big, angle: (dir > 0 ? 160 : -20) + Phaser.Math.Between(-2, 2) * 10 });
+    }
     const p = this.pos(n);
-    const magic = kind === 'magic' || kind === 'dot';
-    const img = this.add.image(Math.round(p.x / ZOOM) * ZOOM + (n.side === 'hero' ? -8 : 8), Math.round(p.y / ZOOM) * ZOOM, magic ? 'spark' : 'slash')
-      .setScale(crit ? ZOOM * 2 : ZOOM).setDepth(9450).setTint(crit ? 0xffe08a : magic ? 0xb8d0ff : 0xffffff);
-    if (!magic) img.setAngle((n.side === 'hero' ? 180 : 0) + Phaser.Math.Between(-3, 3) * 10);
-    this.tweens.add({ targets: img, alpha: { from: 1, to: 0 }, duration: 240 / this.speed, ease: 'stepped', easeParams: [4], onComplete: () => img.destroy() });
+    this.flashLight(p.x, p.y, fx ? col : crit ? 0xffe08a : 0xfff0d0, crit ? 240 : 150, crit ? 1.9 : 1.2, 260);
+  }
+
+  /** a beat of frozen time on a critical hit, the way fighting games land a punch */
+  private hitStop(ms: number): void {
+    if (this.reduced) return;
+    this.tweens.timeScale = 0.05; this.time.timeScale = 0.05;
+    window.setTimeout(() => { if (this.sys?.isActive()) { this.tweens.timeScale = 1; this.time.timeScale = 1; } }, ms);
   }
 
   private flash(n: Node, color = 0xffffff): void {
@@ -342,6 +526,7 @@ export class BattleScene extends Phaser.Scene {
   // ------------------------------------------------------------------ the event player
   async play(events: BEvent[], speed: number): Promise<void> {
     this.speed = speed;
+    if (!this.introDone) { this.introDone = true; await this.introFor([...this.nodes.values()].filter((n) => n.side === 'enemy').map((n) => n.view)); }
     let actor: Node | undefined;
     let skillFx = '';
     let lungeBack: (() => Promise<void>) | null = null;
@@ -359,7 +544,7 @@ export class BattleScene extends Phaser.Scene {
         case 'turn': {
           actor = this.nodes.get(ev.actor);
           firstHitDone = false;
-          if (actor && !ev.skip) { this.ring(actor, true); }
+          if (actor && !ev.skip) { this.ring(actor, true); this.markActor(actor); }
           if (actor && ev.skip) { this.unitBanner(actor, ev.skip === 'stun' ? 'Stunned!' : 'Afraid!', '#ffd24a'); await this.wait(400); }
           break;
         }
@@ -379,7 +564,8 @@ export class BattleScene extends Phaser.Scene {
           if (a && ev.kind !== 'dot' && ev.kind !== 'hazard' && !firstHitDone && ev.kind !== 'reflect') { await this.projectile(a, t, ev.fx ?? skillFx, ev.kind); firstHitDone = true; }
           else if (a && a !== t && (ev.kind === 'phys' || ev.kind === 'magic' || ev.kind === 'true') && !this.reduced) await this.projectile(a, t, ev.fx ?? skillFx, ev.kind, true);
           this.flash(t, ev.kind === 'dot' ? 0xb86aff : 0xffffff);
-          this.hitFx(t, ev.kind, !!ev.crit);
+          if (ev.hp > 0) this.setAnim(t, 'hurt', 280);
+          this.hitFx(t, ev.kind, !!ev.crit, ev.fx ?? skillFx);
           const col = ev.kind === 'magic' ? '#9ec8ff' : ev.kind === 'dot' ? '#d49aff' : ev.kind === 'reflect' ? '#ffd080' : ev.kind === 'hazard' ? '#ffa860' : t.side === 'hero' ? '#ff9a8a' : '#fff6d6';
           const shown = ev.absorbed && !ev.amount ? `(${ev.absorbed})` : `${ev.amount}`;
           this.popText(t.c.x, t.c.y - t.sprite.displayHeight * 0.7, ev.crit ? `${shown}!` : shown, ev.crit ? '#ffe04a' : col, ev.crit ? 26 : 18);
@@ -388,7 +574,7 @@ export class BattleScene extends Phaser.Scene {
             const dir = t.side === 'hero' ? -1 : 1;
             this.tweens.add({ targets: t.sprite, x: dir * 8, duration: 60 / this.speed, yoyo: true, ease: 'quad.out' });
           }
-          if (ev.crit) { this.shake(0.006, 140); this.puff(t.c.x, this.pos(t).y, 0xffe08a, 10); if (a && a.side === 'hero' && a.view.heroId && Math.random() < 0.3) this.say(a, HEROES[a.view.heroId].quotes.crit); }
+          if (ev.crit) { this.hitStop(75); this.shake(0.006, 140); this.puff(t.c.x, this.pos(t).y, 0xffe08a, 10); if (a && a.side === 'hero' && a.view.heroId && Math.random() < 0.3) this.say(a, HEROES[a.view.heroId].quotes.crit); }
           if (t.side === 'hero' && t.view.heroId && ev.hp > 0 && ev.hp / t.maxHp < 0.25 && !this.lowSaid.has(t.uid)) { this.lowSaid.add(t.uid); this.say(t, HEROES[t.view.heroId].quotes.low); }
           else this.puff(t.c.x, this.pos(t).y, ev.kind === 'magic' ? 0x88b8ff : 0xffffff, 4);
           this.hooks.onLog?.(`${a?.view.name ?? '?'} hits ${t.view.name} for ${ev.amount}${ev.absorbed ? ` (+${ev.absorbed} absorbed)` : ''}${ev.crit ? ' — critical!' : ''}`, a?.side === 'hero' ? 'h' : 'e');
@@ -411,6 +597,8 @@ export class BattleScene extends Phaser.Scene {
           const t = this.nodes.get(ev.target);
           if (!t) break;
           this.popText(t.c.x, t.c.y - t.sprite.displayHeight * 0.7, `+${ev.amount}`, '#7be39b', 18);
+          this.flashLight(t.c.x, this.pos(t).y, 0x7be39b, 190, 1.3, 420);
+          this.vfx('heal', t, { tint: 0x8affb0, feet: true, dy: -4 });
           this.setHp(t, ev.hp);
           this.puff(t.c.x, this.pos(t).y, 0x7be39b, 8);
           this.hooks.onLog?.(`${t.view.name} recovers ${ev.amount}.`, 'g');
@@ -419,7 +607,7 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'shield': {
           const t = this.nodes.get(ev.target);
-          if (t) { this.popText(t.c.x, t.c.y - t.sprite.displayHeight * 0.7, `Shield ${ev.amount}`, '#9ec8ff', 14); this.puff(t.c.x, this.pos(t).y, 0x88b8ff, 8); }
+          if (t) { this.popText(t.c.x, t.c.y - t.sprite.displayHeight * 0.7, `Shield ${ev.amount}`, '#9ec8ff', 14); this.vfx('shield', t, { tint: 0x9ec8ff }); }
           await this.wait(120);
           break;
         }
@@ -470,7 +658,13 @@ export class BattleScene extends Phaser.Scene {
         }
         case 'round': break;
         case 'text': this.hooks.onLog?.(ev.msg, ev.tone === 'warn' ? 'w' : ev.tone === 'good' ? 'g' : ''); break;
-        case 'end': break;
+        case 'end':
+          this.markActor(undefined);
+          if (ev.result === 'victory') {
+            for (const n of this.nodes.values()) if (n.side === 'hero' && n.alive) this.setAnim(n, 'win', 1e9);
+            this.confetti(); void this.bannerText('Victory!', '#ffe08a', 34, 110, 1500);
+          } else { this.flashScreen(0xaa2020); void this.bannerText('The company falls…', '#ff9a8a', 28, 110, 1500); }
+          break;
         case 'start': break;
         default: break;
       }
@@ -537,12 +731,17 @@ export class BattleScene extends Phaser.Scene {
       const dir = a.side === 'hero' ? 1 : -1;
       const tx = t.c.x - dir * 54; const ty = t.c.y + 2;
       const ox = a.c.x; const oy = a.c.y;
+      this.setAnim(a, 'wind', 190);
       await this.tween({ targets: a.c, x: tx, y: ty, duration: 170, ease: 'quad.in' });
+      this.setAnim(a, 'strike', 340);
       return async () => { await this.tween({ targets: a.c, x: ox, y: oy, duration: 170, ease: 'quad.out' }); };
     }
     // cast / shoot pose: a small hop and glow
     const col = this.fxColor(fx);
     this.puff(a.c.x, this.pos(a).y, col, 6);
+    this.flashLight(a.c.x, this.pos(a).y, col, 200, 1.4, 380);
+    this.setAnim(a, 'cast', 520);
+    this.vfx('aura', a, { tint: col, feet: true, dy: -3, scale: 0.7 });
     await this.tween({ targets: a.sprite, y: -10, duration: 90, yoyo: true, ease: 'quad.out' });
     return null;
   }
@@ -572,6 +771,17 @@ export class BattleScene extends Phaser.Scene {
   // ------------------------------------------------------------------ frame
   update(_t: number, dt: number): void {
     this.driftT += dt;
+    // a slow GPU (software rendering, an old phone) gets plain pixels instead of a slideshow
+    if (this.hd && this.autoQuality && this.driftT > 4000) {
+      this.slowFor = this.game.loop.actualFps < 26 ? this.slowFor + dt : Math.max(0, this.slowFor - dt);
+      if (this.slowFor > 3500) { this.setQuality('low'); try { localStorage.setItem('dom.fxLow', '1'); } catch { /* private mode */ } this.hooks.onLog?.('Graphics switched to plain pixels (slow frame rate). You can change this in Settings.', 'w'); }
+    }
+    const now = this.time.now;
+    for (const n of this.nodes.values()) if (n.alive) this.stepAnim(n, now);
+    for (const l of this.lightObjs) {
+      const f = Math.sin(this.driftT * l.speed * l.flick * 3 + l.phase) * 0.18 + Math.sin(this.driftT * l.speed * 7.3 + l.phase) * 0.1;
+      l.light.intensity = this.reduced ? l.base : Math.max(0.5, l.base + f);
+    }
     for (const l of this.bgLights) {
       const f = Math.sin(this.driftT * l.speed * l.flick * 3) * 0.06 + Math.sin(this.driftT * l.speed * 7.3) * 0.04;
       l.img.setAlpha(this.reduced ? l.base : Math.max(0.12, l.base + f));

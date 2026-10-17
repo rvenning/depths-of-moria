@@ -42,6 +42,13 @@ function snapshot(b: Battle): Hud {
 
 type Phase = 'intro' | 'fight' | 'summary' | 'ended';
 
+/** the battle stage's graphics mode for a setting (auto remembers a slow-GPU fallback in this browser) */
+function stageQuality(g: 'auto' | 'hd' | 'low'): 'hd' | 'low' {
+  if (g === 'low') return 'low';
+  if (g === 'auto') { try { if (localStorage.getItem('dom.fxLow') === '1') return 'low'; } catch { /* private mode */ } }
+  return 'hd';
+}
+
 export function ExpeditionScreen() {
   const state = useGame();
   const exp = state.expedition;
@@ -91,14 +98,14 @@ export function ExpeditionScreen() {
     if (quiet) {
       // rooms without a fight still show the party standing in the room
       const setup = buildSetup(store.state, { ...plan, waves: [[]] }, { hp: exp.hp });
-      stage.current?.init({ bg, heroes: new Battle(setup, 1, { record: false }).views('hero'), enemies: [], reduced: state.settings.reducedMotion });
+      stage.current?.init({ bg, heroes: new Battle(setup, 1, { record: false }).views('hero'), enemies: [], reduced: state.settings.reducedMotion, quality: stageQuality(state.settings.graphics), autoQuality: state.settings.graphics === 'auto' });
       return;
     }
     if (exp.phase !== 'room' || phase !== 'intro') return;
     const bs = prepareBattle(store.state, true);
     if (!bs) return;
     battleRef.current = { battle: bs.battle, plan: bs.plan };
-    stage.current?.init({ bg, heroes: bs.battle.views('hero'), enemies: bs.battle.views('enemy'), reduced: state.settings.reducedMotion });
+    stage.current?.init({ bg, heroes: bs.battle.views('hero'), enemies: bs.battle.views('enemy'), reduced: state.settings.reducedMotion, quality: stageQuality(state.settings.graphics), autoQuality: state.settings.graphics === 'auto' });
     setHud(snapshot(bs.battle));
     setLog([]);
     pushLog(`— ${plan.title} —`, 'w');

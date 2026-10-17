@@ -40,7 +40,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     await sleep(1500); await shot('01-boss-intro');
     await page.keyboard.press('Enter');
-    for (let i = 0; i < 10; i++) { await sleep(1100); await shot(`02-boss-${i}`); }
+    for (let i = 0; i < 10; i++) { await sleep(500); await shot(`02-boss-${i}`); }
   } else if (scenario === 'tour') {
     await setup(async () => {
       const d = window.__dom; const g = await import('/src/core/game.ts'); const x = await import('/src/core/expedition.ts'); const l = await import('/src/core/loot.ts'); const r = await import('/src/core/rng.ts');

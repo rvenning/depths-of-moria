@@ -49,6 +49,7 @@ export const BattleStage = forwardRef<StageApi, { className?: string }>(function
       disableContextMenu: true,
       scene: s,
       fps: { target: 60 },
+      maxLights: 16,
     });
     game.current = g;
     (window as unknown as { __phaser?: unknown }).__phaser = { game: g, scene: s };

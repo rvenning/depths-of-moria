@@ -1,0 +1,453 @@
+// The 18 creature families drawn natively with the pixel engine. The drawings are the same designs the old vector painter used
+// (256-unit space, facing left), but every shape is shaded, dithered and outlined by the engine so they match the heroes.
+import { Sprite, bayer, def, MAT_ID, toCanvas, type PixImg } from './engine.ts';
+import type { CreatureFamily, EnemyDef } from '../../content/schema.ts';
+import { shade as vshade, rand } from '../draw.ts';
+
+type Pt = [number, number];
+interface Pal { body: string; accent: string; eye: string; gear: string; has: (f: string) => boolean; seed: number }
+interface K { S: Sprite; xf: { ox: number; oy: number; c: number; s: number } | null }
+
+const METAL = '#9aa3ad';
+const WOOD = '#6a4a2c';
+const BONE = '#efe8d4';
+
+// ---------------------------------------------------------------- colour → material
+function toHex(c: string): string {
+  if (c.startsWith('#')) return c.length === 4 ? `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}` : c.slice(0, 7);
+  const m = c.match(/[\d.]+/g) ?? ['128', '128', '128'];
+  return `#${m.slice(0, 3).map((x) => Math.max(0, Math.min(255, Math.round(Number(x)))).toString(16).padStart(2, '0')).join('')}`;
+}
+function mat(color: string, emissive = false): string {
+  const hex = toHex(color), name = `${emissive ? 'ce' : 'c'}${hex}`;
+  if (!(name in MAT_ID)) def(name, hex, { dither: emissive ? 0 : 0.2, spread: 0.15, emissive });
+  return name;
+}
+const shade = (c: string, a: number): string => toHex(vshade(toHex(c), a));
+
+// ---------------------------------------------------------------- the drawing kit (same names the painters always used)
+const T = (k: K, p: Pt): Pt => (k.xf ? [k.xf.ox + p[0] * k.xf.c - p[1] * k.xf.s, k.xf.oy + p[0] * k.xf.s + p[1] * k.xf.c] : p);
+const bez = (a: Pt, b: Pt, c: Pt, d: Pt, n = 10): Pt[] => Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0], u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]] as Pt; });
+/** closed Catmull-Rom blob through points */
+function blob(pts: Pt[]): Pt[] {
+  const out: Pt[] = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i + n - 1) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    for (let t = 0; t < 1; t += 0.25) {
+      const t2 = t * t, t3 = t2 * t;
+      out.push([0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3), 0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)]);
+    }
+  }
+  return out;
+}
+const dims = (k: K, pts: Pt[]): [number, number] => { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return [(Math.max(...xs) - Math.min(...xs)) * k.S.k, (Math.max(...ys) - Math.min(...ys)) * k.S.k]; };
+const area = (k: K, pts: Pt[]): number => { const [w, h] = dims(k, pts); return w * h; };
+/** the roundness of a shape follows its size: big bodies are well rounded, small details stay tight */
+const bevelFor = (w: number, h: number): number => Math.max(2, Math.min(8, Math.min(w, h) * 0.42));
+
+function poly(k: K, pts: Pt[], color: string, smooth = false, o: { flat?: boolean; grad?: number; emissive?: boolean; g?: string } = {}): void {
+  const P = (smooth ? blob(pts) : pts).map((p) => T(k, p));
+  const tiny = area(k, pts) < 30;
+  const [bw, bh] = dims(k, pts);
+  k.S.poly(P, mat(color, o.emissive), { bevel: bevelFor(bw, bh), flat: o.flat || o.emissive, tone: o.emissive ? 3.2 : 2.3, grad: o.grad ?? (bw * bh > 500 ? 0.45 : undefined), g: o.g ?? (tiny ? 'detail' : undefined), noLine: o.emissive });
+}
+function ellipse(k: K, cx: number, cy: number, rx: number, ry: number, color: string, o: { emissive?: boolean; g?: string } = {}): void {
+  const [x, y] = T(k, [cx, cy]);
+  const tiny = rx * ry * k.S.k * k.S.k < 6;
+  k.S.ell(x, y, rx, ry, mat(color, o.emissive), { bevel: bevelFor(rx * 2 * k.S.k, ry * 2 * k.S.k), flat: o.emissive, tone: 3.2, grad: rx * ry * k.S.k * k.S.k > 120 ? 0.4 : undefined, g: o.g ?? (tiny ? 'detail' : undefined), noLine: o.emissive });
+}
+const circle = (k: K, cx: number, cy: number, r: number, color: string, o: { emissive?: boolean; g?: string } = {}): void => ellipse(k, cx, cy, r, r, color, o);
+function limb(k: K, x1: number, y1: number, x2: number, y2: number, w1: number, w2: number, color: string, g?: string): void {
+  k.S.line([T(k, [x1, y1]), T(k, [x2, y2])], w1, mat(color), { bevel: bevelFor(Math.min(w1, w2) * k.S.k, Math.min(w1, w2) * k.S.k * 1.5), g }, w2);
+}
+function pline(k: K, pts: Pt[], w: number, color: string, w2?: number, g?: string): void { k.S.line(pts.map((p) => T(k, p)), w, mat(color), { bevel: 3, g }, w2); }
+function line(k: K, x1: number, y1: number, x2: number, y2: number, w: number, color: string): void {
+  k.S.line([T(k, [x1, y1]), T(k, [x2, y2])], w, mat(color), { flat: true, tone: 2.6, g: 'detail' });
+}
+/** a glowing eye: a bright iris with a dark pupil and a highlight */
+function eye(k: K, x: number, y: number, r: number, color: string, angry = 0): void {
+  const [cx, cy] = T(k, [x, y]);
+  k.S.ell(cx, cy, r * 1.15, r, mat(color, true), { flat: true, tone: 3.4, noLine: true });
+  k.S.dot(x + r * 0.2 + (k.xf ? 0 : 0), y + angry * 0.2, '#150d20');
+  k.S.dot(x - r * 0.25, y - r * 0.35, '#ffffff');
+}
+
+// ---------------------------------------------------------------- shared bits
+function horns(k: K, x: number, y: number, s: number, color: string, flip = 1): void {
+  for (const d of [-1, 1]) poly(k, [[x + d * 10 * s, y], [x + d * 22 * s * flip, y - 26 * s], [x + d * 30 * s, y - 38 * s], [x + d * 24 * s, y - 8 * s], [x + d * 12 * s, y + 4 * s]], color, true);
+}
+function ears(k: K, x: number, y: number, s: number, color: string): void {
+  poly(k, [[x - 6 * s, y], [x - 44 * s, y - 24 * s], [x - 38 * s, y + 4 * s], [x - 8 * s, y + 14 * s]], color, true);
+  poly(k, [[x + 14 * s, y - 2], [x + 46 * s, y - 28 * s], [x + 40 * s, y + 2 * s], [x + 14 * s, y + 14 * s]], shade(color, -0.1), true);
+}
+function helm(k: K, x: number, y: number, s: number, color: string): void {
+  poly(k, [[x - 20 * s, y + 4], [x - 18 * s, y - 20 * s], [x, y - 28 * s], [x + 18 * s, y - 20 * s], [x + 20 * s, y + 4]], color, true);
+  line(k, x, y - 26 * s, x, y + 2, 3, shade(color, -0.35));
+}
+function fangs(k: K, x: number, y: number, s: number): void {
+  for (const d of [-1, 1]) poly(k, [[x + d * 6 * s, y], [x + d * 9 * s, y + 12 * s], [x + d * 2 * s, y + 2]], BONE, false, { flat: true });
+}
+function xf<T>(k: K, x: number, y: number, ang: number, fn: () => T): T {
+  const prev = k.xf; k.xf = { ox: x, oy: y, c: Math.cos(ang), s: Math.sin(ang) }; const r = fn(); k.xf = prev; return r;
+}
+function weaponAxe(k: K, x: number, y: number, ang: number, s: number): void {
+  xf(k, x, y, ang, () => { limb(k, 0, 0, 0, -70 * s, 7 * s, 6 * s, WOOD, 'haft'); poly(k, [[-4 * s, -70 * s], [-34 * s, -80 * s], [-30 * s, -50 * s], [-4 * s, -52 * s]], METAL, true); });
+}
+function weaponSword(k: K, x: number, y: number, ang: number, s: number, color = METAL): void {
+  xf(k, x, y, ang, () => { poly(k, [[-5 * s, 0], [5 * s, 0], [4 * s, -80 * s], [0, -92 * s], [-4 * s, -80 * s]], color); poly(k, [[-14 * s, 0], [14 * s, 0], [14 * s, 6 * s], [-14 * s, 6 * s]], '#6a5a3a'); limb(k, 0, 6 * s, 0, 22 * s, 6 * s, 6 * s, WOOD); });
+}
+function weaponClub(k: K, x: number, y: number, ang: number, s: number, color = WOOD): void {
+  xf(k, x, y, ang, () => poly(k, [[-5 * s, 0], [5 * s, 0], [14 * s, -70 * s], [8 * s, -96 * s], [-10 * s, -96 * s], [-14 * s, -70 * s]], color, true));
+}
+function weaponSpear(k: K, x: number, y: number, ang: number, s: number): void {
+  xf(k, x, y, ang, () => { limb(k, 0, 30 * s, 0, -90 * s, 5 * s, 5 * s, WOOD); poly(k, [[-8 * s, -90 * s], [0, -122 * s], [8 * s, -90 * s]], METAL); });
+}
+function weaponHammer(k: K, x: number, y: number, ang: number, s: number): void {
+  xf(k, x, y, ang, () => { limb(k, 0, 0, 0, -86 * s, 8 * s, 7 * s, WOOD); poly(k, [[-26 * s, -86 * s], [26 * s, -86 * s], [26 * s, -120 * s], [-26 * s, -120 * s]], '#6a6e76'); });
+}
+function banner(k: K, x: number, y: number, s: number, color: string): void {
+  limb(k, x, y, x, y - 130 * s, 5, 4, WOOD);
+  poly(k, [[x, y - 130 * s], [x + 50 * s, y - 118 * s], [x + 38 * s, y - 100 * s], [x + 50 * s, y - 82 * s], [x, y - 92 * s]], color, true);
+}
+function plate(k: K, x: number, y: number, w: number, h: number, color: string): void {
+  poly(k, [[x - w / 2, y], [x + w / 2, y], [x + w / 2 - 6, y + h], [x - w / 2 + 6, y + h]], color, true);
+  for (const d of [-0.3, 0.3]) circle(k, x + d * w, y + h * 0.4, 2.5, shade(color, 0.4));
+}
+function wing(k: K, x: number, y: number, s: number, color: string, flip: number, bat = true): void {
+  const d = flip;
+  const pts: Pt[] = bat
+    ? [[x, y], [x + d * 40 * s, y - 70 * s], [x + d * 90 * s, y - 80 * s], [x + d * 70 * s, y - 40 * s], [x + d * 100 * s, y - 20 * s], [x + d * 60 * s, y - 6 * s], [x + d * 70 * s, y + 20 * s], [x + d * 28 * s, y + 6 * s]]
+    : [[x, y], [x + d * 50 * s, y - 80 * s], [x + d * 110 * s, y - 70 * s], [x + d * 80 * s, y - 20 * s], [x + d * 30 * s, y + 10 * s]];
+  poly(k, pts, color, bat, { grad: 0.5 });
+}
+function tail(k: K, x: number, y: number, s: number, color: string, len = 70): void {
+  pline(k, bez([x, y], [x + 30 * s, y + 10 * s], [x + len * s, y - 10 * s], [x + (len + 14) * s, y - 40 * s]), 9 * s, color, 4 * s);
+}
+function tentacle(k: K, x: number, y: number, ang: number, len: number, w: number, color: string, wob: number): void {
+  const pts: Pt[] = [];
+  for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push([Math.sin(t * 5 + wob) * 14 * t, -t * len]); }
+  xf(k, x, y, ang, () => pline(k, pts, w, color, w * 0.55));
+}
+
+// ---------------------------------------------------------------- families (all face LEFT)
+type Painter = (k: K, p: Pal) => void;
+
+const goblin: Painter = (k, p) => {
+  limb(k, 112, 190, 96, 232, 18, 14, shade(p.body, -0.1)); limb(k, 146, 190, 160, 232, 18, 14, shade(p.body, -0.2));
+  ellipse(k, 92, 234, 16, 7, shade(p.gear, -0.2)); ellipse(k, 164, 234, 16, 7, shade(p.gear, -0.25));
+  poly(k, [[96, 130], [164, 130], [176, 190], [84, 196]], p.gear, true);
+  ellipse(k, 128, 150, 44, 50, p.body);
+  poly(k, [[88, 182], [168, 182], [174, 204], [82, 204]], shade(p.gear, -0.1), true);
+  limb(k, 166, 138, 190, 172, 15, 12, p.body);
+  if (p.has('pick')) weaponHammer(k, 192, 176, 0.5, 0.7);
+  else if (p.has('cleaver')) weaponSword(k, 192, 176, 0.6, 0.8, '#b9bfc6');
+  else if (p.has('axe')) weaponAxe(k, 192, 176, 0.3, 0.9);
+  else if (p.has('dagger')) weaponSword(k, 192, 176, 0.8, 0.5);
+  else weaponSword(k, 192, 176, 0.7, 0.55, '#a8a49a');
+  limb(k, 92, 138, 66, 170, 15, 12, p.body);
+  ears(k, 118, 98, 1, p.body);
+  circle(k, 118, 98, 36, p.body);
+  if (p.has('helm')) helm(k, 118, 80, 1.15, '#7a7f88');
+  if (p.has('hood')) poly(k, [[80, 100], [118, 54], [158, 100], [150, 120], [86, 120]], p.gear, true);
+  if (p.has('horns')) horns(k, 118, 66, 1, '#d8d0b8');
+  if (p.has('crown')) poly(k, [[90, 70], [98, 48], [108, 66], [118, 44], [128, 66], [138, 48], [146, 70]], '#d9b25f', false, { flat: true });
+  eye(k, 104, 98, 6, p.eye, 1); eye(k, 130, 98, 6, p.eye, -1);
+  poly(k, [[102, 118], [134, 118], [128, 128], [108, 128]], '#2a1410', false, { flat: true });
+  fangs(k, 118, 120, 0.8);
+};
+
+const archer: Painter = (k, p) => {
+  limb(k, 112, 190, 104, 232, 16, 13, shade(p.body, -0.1)); limb(k, 144, 190, 152, 232, 16, 13, shade(p.body, -0.2));
+  poly(k, [[96, 130], [160, 130], [170, 204], [90, 204]], p.gear, true);
+  ellipse(k, 128, 150, 38, 46, p.body);
+  poly(k, [[92, 136], [164, 136], [150, 176], [108, 176]], p.gear, true);
+  const bow: Pt[] = []; for (let a = -1.1; a <= 1.1; a += 0.15) bow.push([70 + 66 * Math.cos(a), 150 + 66 * Math.sin(a)]);
+  pline(k, bow, 6, WOOD);
+  line(k, bow[0][0], bow[0][1], bow[bow.length - 1][0], bow[bow.length - 1][1], 1.5, '#e9e2c8');
+  line(k, 70, 150, 128, 150, 4, WOOD); poly(k, [[60, 144], [68, 150], [60, 156]], METAL);
+  limb(k, 150, 144, 100, 150, 13, 11, p.body); limb(k, 96, 140, 74, 150, 12, 10, p.body);
+  ears(k, 120, 100, 0.9, p.body);
+  circle(k, 120, 100, 32, p.body);
+  poly(k, [[84, 102], [120, 54], [158, 102], [150, 118], [90, 118]], p.gear, true);
+  eye(k, 108, 100, 5.5, p.eye, 1); eye(k, 132, 100, 5.5, p.eye, -1);
+  if (p.has('feather')) line(k, 140, 62, 156, 38, 4, '#d94a3a');
+};
+
+const bat: Painter = (k, p) => {
+  wing(k, 118, 130, 1.3, shade(p.body, -0.15), -1); wing(k, 138, 130, 1.3, shade(p.body, -0.25), 1);
+  ellipse(k, 128, 150, 28, 40, p.body);
+  limb(k, 120, 184, 116, 214, 8, 6, p.accent); limb(k, 138, 184, 144, 214, 8, 6, p.accent);
+  poly(k, [[110, 106], [100, 74], [120, 92]], p.body); poly(k, [[146, 106], [156, 74], [136, 92]], p.body);
+  circle(k, 128, 114, 26, p.body);
+  eye(k, 118, 112, 5, p.eye, 1); eye(k, 138, 112, 5, p.eye, -1);
+  poly(k, [[118, 126], [138, 126], [128, 138]], '#2a1018', false, { flat: true }); fangs(k, 128, 126, 0.7);
+};
+
+const orc: Painter = (k, p) => {
+  limb(k, 108, 188, 94, 234, 26, 20, shade(p.body, -0.12)); limb(k, 150, 188, 164, 234, 26, 20, shade(p.body, -0.22));
+  ellipse(k, 90, 236, 22, 8, '#2a2420'); ellipse(k, 168, 236, 22, 8, '#2a2420');
+  poly(k, [[76, 116], [184, 116], [170, 200], [88, 200]], p.body, true);
+  if (p.has('plate')) { plate(k, 128, 124, 90, 64, p.gear); plate(k, 128, 190, 74, 18, shade(p.gear, -0.15)); }
+  else poly(k, [[92, 150], [164, 150], [168, 204], [88, 204]], p.gear, true);
+  ellipse(k, 74, 122, 22, 16, p.gear); ellipse(k, 184, 122, 22, 16, shade(p.gear, -0.1));
+  limb(k, 182, 126, 212, 168, 22, 17, p.body); limb(k, 74, 126, 52, 166, 22, 17, p.body);
+  if (p.has('hammer')) weaponHammer(k, 214, 172, 0.45, 0.95);
+  else if (p.has('axe')) weaponAxe(k, 214, 172, 0.35, 1.1);
+  else if (p.has('sword')) weaponSword(k, 214, 172, 0.5, 1.0);
+  else if (p.has('whip')) pline(k, bez([214, 172], [250, 150], [240, 100], [200, 80]), 5, '#4a2a1a');
+  else if (p.has('chain')) { for (let i = 0; i < 7; i++) circle(k, 216 + i * 4, 176 - i * 10, 5, METAL); }
+  else weaponClub(k, 214, 172, 0.45, 0.95);
+  if (p.has('shield')) { poly(k, [[32, 150], [66, 140], [74, 192], [52, 216], [30, 192]], '#6a6e76', true); circle(k, 52, 174, 7, '#b99a4a'); }
+  if (p.has('banner')) banner(k, 52, 190, 0.9, p.accent);
+  if (p.has('drum')) { ellipse(k, 128, 170, 34, 22, WOOD); ellipse(k, 128, 160, 34, 12, '#e8d8b0'); }
+  circle(k, 128, 90, 36, p.body);
+  poly(k, [[96, 86], [160, 86], [158, 76], [98, 76]], shade(p.body, -0.25));
+  if (p.has('helm')) helm(k, 128, 74, 1.25, '#6a6e76');
+  eye(k, 114, 92, 6, p.eye, 1); eye(k, 142, 92, 6, p.eye, -1);
+  poly(k, [[104, 108], [152, 108], [146, 124], [110, 124]], '#2a1410', false, { flat: true });
+  poly(k, [[108, 108], [112, 96], [118, 110]], BONE, false, { flat: true }); poly(k, [[148, 108], [144, 96], [138, 110]], BONE, false, { flat: true });
+  if (p.has('horns')) horns(k, 128, 62, 1, '#d8d0b8');
+};
+
+const warg: Painter = (k, p) => {
+  if (p.has('tail')) tail(k, 190, 150, 1, p.body, 36);
+  limb(k, 78, 180, 66, 232, 22, 14, shade(p.body, -0.15)); limb(k, 108, 186, 108, 232, 22, 14, shade(p.body, -0.25));
+  limb(k, 178, 176, 188, 232, 24, 14, shade(p.body, -0.15)); limb(k, 150, 186, 150, 232, 24, 14, shade(p.body, -0.25));
+  ellipse(k, 142, 150, 62, 44, p.body);
+  if (p.has('ruff')) poly(k, [[80, 120], [96, 96], [108, 118], [122, 94], [134, 116], [150, 94], [158, 120], [140, 150], [90, 150]], shade(p.body, 0.15));
+  poly(k, [[34, 130], [74, 96], [100, 108], [104, 150], [80, 170], [46, 160]], p.body, true);
+  poly(k, [[34, 138], [20, 150], [28, 158], [50, 150]], shade(p.body, -0.2));
+  poly(k, [[80, 100], [84, 72], [98, 98]], p.body);
+  eye(k, 66, 124, 5.5, p.eye, 1);
+  fangs(k, 44, 154, 0.9);
+  circle(k, 24, 144, 4, '#150d20');
+  if (p.has('ember')) { for (let i = 0; i < 6; i++) circle(k, 100 + i * 14, 124 + (i % 2) * 8, 3, '#ffb347', { emissive: true }); }
+  if (p.has('scars')) { line(k, 110, 130, 140, 168, 2.5, '#d8c0a0'); line(k, 118, 126, 146, 160, 2.5, '#d8c0a0'); }
+};
+
+const troll: Painter = (k, p) => {
+  limb(k, 104, 190, 90, 236, 34, 24, shade(p.body, -0.12)); limb(k, 156, 190, 170, 236, 34, 24, shade(p.body, -0.22));
+  ellipse(k, 88, 238, 28, 9, '#3a3a34'); ellipse(k, 174, 238, 28, 9, '#3a3a34');
+  ellipse(k, 128, 150, 66, 66, p.body);
+  poly(k, [[76, 170], [180, 170], [172, 208], [84, 208]], p.gear, true);
+  for (let i = 0; i < 6; i++) circle(k, 96 + i * 12, 130 + (i % 3) * 18, 6, shade(p.accent, 0.1));
+  limb(k, 186, 112, 216, 172, 32, 22, p.body); limb(k, 70, 112, 38, 172, 32, 22, p.body);
+  if (p.has('club')) weaponClub(k, 218, 178, 0.5, 1.25);
+  else if (p.has('spear')) weaponSpear(k, 218, 178, 0.35, 1.2);
+  if (p.has('chain')) for (let i = 0; i < 6; i++) circle(k, 40 + i * 5, 176 - i * 8, 5, METAL);
+  circle(k, 130, 80, 30, p.body);
+  poly(k, [[102, 84], [158, 84], [156, 72], [104, 72]], shade(p.body, -0.3));
+  eye(k, 118, 82, 5, p.eye, 1); eye(k, 142, 82, 5, p.eye, -1);
+  poly(k, [[110, 98], [150, 98], [146, 112], [114, 112]], '#2a1814', false, { flat: true });
+  poly(k, [[114, 98], [118, 88], [122, 99]], BONE, false, { flat: true }); poly(k, [[146, 98], [142, 88], [138, 99]], BONE, false, { flat: true });
+  if (p.has('crown')) poly(k, [[104, 56], [112, 36], [122, 54], [132, 32], [142, 54], [152, 36], [158, 56]], '#d9b25f', false, { flat: true });
+};
+
+const wraith: Painter = (k, p) => {
+  const body: Pt[] = [...bez([128, 50], [68, 60], [60, 150], [54, 244]), [76, 232], [94, 250], [116, 232], [134, 252], [156, 232], [176, 250], [196, 236], ...bez([196, 236], [196, 150], [188, 60], [128, 50])];
+  poly(k, body, shade(p.body, 0.05), false, { grad: 0.9 });
+  ellipse(k, 128, 96, 30, 36, '#08060c', { g: 'face' });
+  eye(k, 116, 94, 5.5, p.eye, 1); eye(k, 140, 94, 5.5, p.eye, -1);
+  limb(k, 80, 140, 36, 170, 14, 6, p.body); limb(k, 176, 140, 214, 170, 14, 6, p.body);
+  for (const x of [28, 40, 48]) line(k, 36, 170, x, 186, 2.5, shade(p.body, 0.3));
+  if (p.has('quill')) line(k, 214, 170, 230, 120, 3, '#e9e2c8');
+  if (p.has('scroll')) poly(k, [[196, 160], [226, 156], [228, 190], [198, 194]], '#d8c8a0');
+  if (p.has('keys')) for (let i = 0; i < 3; i++) circle(k, 108 + i * 20, 168, 5, '#d9b25f');
+  if (p.has('book')) poly(k, [[170, 164], [210, 156], [214, 192], [174, 200]], '#4a2a5a');
+  if (p.has('crown')) poly(k, [[98, 58], [106, 40], [116, 56], [128, 36], [140, 56], [150, 40], [158, 58]], '#d9b25f', false, { flat: true });
+};
+
+const serpent: Painter = (k, p) => {
+  const path: Pt[] = [...bez([200, 236], [240, 210], [200, 170], [160, 200], 8), ...bez([160, 200], [120, 232], [80, 220], [70, 190], 8), ...bez([70, 190], [60, 160], [100, 140], [96, 110], 8)];
+  pline(k, path, 30, p.body);
+  for (let i = 0; i < path.length; i += 3) ellipse(k, path[i][0], path[i][1], 5, 5, shade(p.accent, 0.1), { g: 'detail' });
+  poly(k, [[60, 84], [100, 60], [132, 74], [130, 110], [96, 124], [66, 112]], p.body, true);
+  eye(k, 88, 86, 5, p.eye, 1);
+  poly(k, [[60, 106], [36, 112], [60, 118]], '#6a1a2a', false, { flat: true });
+  fangs(k, 70, 112, 0.8);
+  if (p.has('fins') || p.has('frill')) for (let i = 0; i < 5; i++) poly(k, [[100 + i * 6, 66 - i * 4], [108 + i * 6, 40 - i * 6], [112 + i * 6, 70 - i * 3]], p.accent);
+};
+
+const guardian: Painter = (k, p) => {
+  limb(k, 112, 190, 106, 232, 20, 16, p.gear); limb(k, 144, 190, 150, 232, 20, 16, shade(p.gear, -0.2));
+  ellipse(k, 102, 234, 18, 7, '#2a2a2e'); ellipse(k, 154, 234, 18, 7, '#2a2a2e');
+  poly(k, [[96, 118], [160, 118], [168, 200], [88, 200]], p.body, true);
+  plate(k, 128, 124, 70, 56, shade(p.gear, 0.1));
+  if (p.has('cape')) poly(k, [[160, 120], [196, 160], [190, 232], [160, 200]], shade(p.accent, -0.2), true);
+  limb(k, 164, 128, 188, 170, 16, 13, p.gear); limb(k, 92, 128, 70, 166, 16, 13, p.gear);
+  if (p.has('sword')) weaponSword(k, 190, 176, 0.5, 1.0);
+  else if (p.has('spear')) weaponSpear(k, 190, 180, 0.15, 1.0);
+  else weaponSword(k, 190, 176, 0.45, 0.9, '#8a8f98');
+  if (p.has('shield')) { poly(k, [[28, 146], [70, 136], [76, 190], [50, 214], [24, 190]], '#5a5e66', true); line(k, 50, 142, 50, 206, 3, shade('#5a5e66', 0.3)); }
+  if (p.has('banner')) banner(k, 62, 190, 0.8, p.accent);
+  if (p.has('robe')) poly(k, [[92, 190], [164, 190], [176, 240], [80, 240]], shade(p.body, -0.1), true);
+  circle(k, 128, 90, 30, shade(p.body, 0.1));
+  if (p.has('helm')) { helm(k, 128, 84, 1.45, '#6a6e76'); poly(k, [[108, 90], [148, 90], [146, 100], [110, 100]], '#0a0a0e', false, { flat: true }); }
+  else { ellipse(k, 118, 92, 8, 9, '#0a0a0e', { g: 'face' }); ellipse(k, 140, 92, 8, 9, '#0a0a0e', { g: 'face' }); }
+  eye(k, 118, 92, 4, p.eye, 1); eye(k, 140, 92, 4, p.eye, -1);
+};
+
+const spider: Painter = (k, p) => {
+  for (const side of [-1, 1]) for (let i = 0; i < 4; i++) {
+    const b: Pt = [128 + side * 22, 150 + (i - 1.5) * 8], m: Pt = [128 + side * (70 + i * 6), 100 + i * 16], e: Pt = [128 + side * (96 + i * 12), 226];
+    const pts: Pt[] = []; for (let t = 0; t <= 1.001; t += 0.125) { const u = 1 - t; pts.push([u * u * b[0] + 2 * u * t * m[0] + t * t * e[0], u * u * b[1] + 2 * u * t * m[1] + t * t * e[1]]); }
+    pline(k, pts, 6, shade(p.body, i % 2 ? -0.15 : 0), 3);
+  }
+  ellipse(k, 150, 160, 44, 38, p.body);
+  for (let i = 0; i < 4; i++) circle(k, 140 + i * 12, 152 + (i % 2) * 14, 4, p.accent);
+  circle(k, 96, 150, 30, shade(p.body, 0.05));
+  ([[84, 142], [96, 138], [108, 142], [90, 152], [102, 152], [96, 162]] as Pt[]).forEach(([x, y], i) => eye(k, x, y, i < 3 ? 4.5 : 3, p.eye, 0));
+  for (const d of [-1, 1]) poly(k, [[96 + d * 6, 170], [96 + d * 10, 192], [96 + d * 2, 176]], '#e9e2c8', false, { flat: true });
+};
+
+const drake: Painter = (k, p) => {
+  wing(k, 138, 118, 1.0, shade(p.accent, -0.1), 1, false);
+  tail(k, 192, 170, 1, p.body, 38);
+  limb(k, 100, 186, 92, 232, 24, 14, shade(p.body, -0.15)); limb(k, 166, 186, 172, 232, 24, 14, shade(p.body, -0.25));
+  ellipse(k, 138, 158, 58, 42, p.body);
+  poly(k, [[96, 168], [178, 168], [170, 198], [102, 198]], shade(p.accent, 0.1), true);
+  limb(k, 86, 138, 62, 104, 28, 22, p.body);
+  poly(k, [[34, 92], [74, 74], [96, 92], [88, 120], [44, 116]], p.body, true);
+  poly(k, [[34, 100], [18, 108], [32, 116]], shade(p.body, -0.2));
+  poly(k, [[70, 76], [60, 52], [82, 74]], p.accent); poly(k, [[84, 80], [82, 56], [96, 82]], p.accent);
+  eye(k, 62, 96, 5, p.eye, 1); fangs(k, 42, 116, 0.7);
+  if (p.has('horns')) horns(k, 76, 76, 0.7, '#d8d0b8');
+};
+
+const fiend: Painter = (k, p) => {
+  if (p.has('wings')) { wing(k, 118, 130, 1.1, shade(p.accent, -0.25), -1); wing(k, 140, 130, 1.1, shade(p.accent, -0.35), 1); }
+  tail(k, 150, 196, 1, p.body, 44);
+  limb(k, 112, 188, 100, 232, 18, 14, shade(p.body, -0.1)); limb(k, 144, 188, 156, 232, 18, 14, shade(p.body, -0.2));
+  ellipse(k, 128, 154, 38, 48, p.body);
+  ellipse(k, 128, 156, 14, 18, p.accent, { emissive: true });
+  limb(k, 160, 138, 190, 168, 14, 10, p.body); limb(k, 96, 138, 68, 168, 14, 10, p.body);
+  if (p.has('staff')) { limb(k, 192, 230, 192, 90, 7, 6, WOOD); circle(k, 192, 84, 9, p.accent, { emissive: true }); }
+  for (const x of [190, 66]) for (const d of [-8, 0, 8]) circle(k, x + d, 172 + Math.abs(d) * 0.3, 3, '#e9e2c8');
+  circle(k, 128, 94, 30, p.body);
+  horns(k, 128, 74, 1.1, p.has('horns') ? '#e9e2c8' : shade(p.accent, -0.3));
+  eye(k, 116, 94, 5.5, p.eye, 1); eye(k, 140, 94, 5.5, p.eye, -1);
+  poly(k, [[112, 110], [144, 110], [138, 122], [118, 122]], '#2a0a08', false, { flat: true }); fangs(k, 128, 112, 0.6);
+  if (p.has('crown')) poly(k, [[102, 62], [110, 44], [120, 60], [128, 40], [136, 60], [146, 44], [154, 62]], '#d9b25f', false, { flat: true });
+  if (p.has('hood')) poly(k, [[88, 98], [128, 52], [170, 98], [164, 118], [94, 118]], '#2a1a14', true);
+};
+
+const wisp: Painter = (k, p) => {
+  const shape = (s: number): Pt[] => [...bez([128, 40], [176, 90], [190, 150], [148, 188], 8), ...bez([148, 188], [138, 216], [118, 216], [108, 188], 6), ...bez([108, 188], [66, 150], [80, 90], [128, 40], 8)].map(([x, y]) => [128 + (x - 128) * s, 140 + (y - 140) * s] as Pt);
+  poly(k, shape(1), shade(p.accent, -0.1), false, { emissive: true });
+  poly(k, shape(0.72), shade(p.accent, 0.35), false, { emissive: true });
+  poly(k, shape(0.42), '#ffffff', false, { emissive: true });
+  eye(k, 112, 130, 6, p.eye, 1); eye(k, 144, 130, 6, p.eye, -1);
+  poly(k, [[112, 150], [144, 150], [138, 164], [118, 164]], '#0b0a0e', false, { flat: true });
+  const r = rand(p.seed);
+  for (let i = 0; i < 9; i++) circle(k, 70 + r() * 120, 60 + r() * 150, 1.5 + r() * 3, p.eye, { emissive: true });
+  for (const d of [-1, 0, 1]) pline(k, bez([128 + d * 14, 200], [128 + d * 40, 224], [128 + d * 20, 240], [128 + d * 20, 246], 5), 6, p.accent, 2);
+};
+
+const golem: Painter = (k, p) => {
+  poly(k, [[88, 190], [116, 190], [114, 236], [84, 236]], shade(p.body, -0.15));
+  poly(k, [[142, 190], [170, 190], [174, 236], [144, 236]], shade(p.body, -0.25));
+  poly(k, [[70, 100], [186, 100], [176, 198], [80, 198]], p.body);
+  poly(k, [[102, 130], [154, 130], [150, 174], [106, 174]], '#1a0f0c', false, { flat: true });
+  ellipse(k, 128, 152, 18, 18, p.accent, { emissive: true });
+  for (let i = 0; i < 4; i++) line(k, 110, 138 + i * 10, 146, 138 + i * 10, 3, p.accent);
+  poly(k, [[52, 100], [88, 100], [84, 150], [50, 146]], shade(p.body, 0.05));
+  poly(k, [[168, 100], [204, 100], [208, 146], [172, 150]], shade(p.body, -0.1));
+  poly(k, [[46, 148], [84, 152], [80, 192], [44, 188]], shade(p.body, -0.15));
+  poly(k, [[172, 152], [210, 148], [212, 188], [176, 192]], shade(p.body, -0.2));
+  if (p.has('hammer')) weaponHammer(k, 212, 192, 0.35, 1.3);
+  if (p.has('pillar')) poly(k, [[192, 60], [222, 60], [222, 190], [192, 190]], '#9a968c');
+  if (p.has('book')) poly(k, [[170, 130], [208, 124], [212, 164], [174, 170]], '#4a2a5a');
+  if (p.has('rivets')) for (let i = 0; i < 6; i++) circle(k, 84 + i * 18, 108, 3, shade(p.body, 0.4));
+  poly(k, [[96, 52], [160, 52], [166, 100], [90, 100]], shade(p.body, 0.08));
+  poly(k, [[104, 74], [152, 74], [150, 86], [106, 86]], '#0a0a0e', false, { flat: true });
+  eye(k, 116, 80, 4.5, p.eye, 0); eye(k, 140, 80, 4.5, p.eye, 0);
+  if (p.has('furnace')) { poly(k, [[110, 20], [146, 20], [142, 54], [114, 54]], '#44484e'); ellipse(k, 128, 18, 11, 8, '#ff7a2a', { emissive: true }); }
+};
+
+const horror: Painter = (k, p) => {
+  const r = rand(p.seed + 5);
+  for (let i = 0; i < 7; i++) tentacle(k, 60 + i * 22, 236, (i - 3) * 0.28, 120 + r() * 70, 22 - Math.abs(i - 3) * 2, i % 2 ? shade(p.body, -0.15) : p.body, r() * 5);
+  ellipse(k, 128, 150, 70, 62, p.body);
+  ellipse(k, 128, 190, 56, 12, '#14081a', { g: 'mouth' });
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI; poly(k, [[128 + Math.cos(a) * 52 - 4, 188 + Math.sin(a) * -6], [128 + Math.cos(a) * 52, 202], [128 + Math.cos(a) * 52 + 4, 188]], BONE, false, { flat: true }); }
+  ([[104, 128], [128, 112], [152, 128], [116, 150], [140, 150]] as Pt[]).forEach(([x, y], i) => eye(k, x, y, i === 1 ? 9 : 6, p.eye, 0));
+  if (p.has('fangs')) fangs(k, 128, 186, 1.4);
+};
+
+const balrog: Painter = (k, p) => {
+  wing(k, 100, 110, 1.45, shade(p.body, -0.1), -1); wing(k, 156, 110, 1.45, shade(p.body, -0.2), 1);
+  limb(k, 108, 188, 90, 238, 34, 24, p.body); limb(k, 150, 188, 168, 238, 34, 24, shade(p.body, -0.15));
+  ellipse(k, 128, 150, 52, 62, p.body);
+  for (let i = 0; i < 9; i++) poly(k, [[88 + i * 10, 150], [92 + i * 10, 110 - (i % 3) * 16], [100 + i * 10, 150]], i % 2 ? p.accent : p.eye, true, { emissive: true });
+  limb(k, 170, 112, 214, 156, 26, 18, p.body); limb(k, 86, 112, 44, 148, 26, 18, p.body);
+  xf(k, 218, 160, 0.35, () => poly(k, [[-9, 0], [9, 0], [12, -110], [0, -134], [-12, -110]], p.accent, false, { emissive: true }));
+  pline(k, bez([44, 150], [10, 130], [20, 80], [46, 56]), 5, p.accent);
+  circle(k, 128, 84, 34, p.body);
+  horns(k, 128, 60, 1.5, '#3a2a30');
+  eye(k, 114, 86, 6, p.eye, 1); eye(k, 142, 86, 6, p.eye, -1);
+  poly(k, [[110, 104], [146, 104], [140, 120], [116, 120]], '#1a0408', false, { flat: true });
+};
+
+const warden: Painter = (k, p) => {
+  poly(k, [[84, 188], [120, 188], [118, 238], [78, 238]], shade(p.body, -0.2));
+  poly(k, [[138, 188], [174, 188], [180, 238], [140, 238]], shade(p.body, -0.3));
+  poly(k, [[66, 96], [190, 96], [178, 200], [78, 200]], p.body);
+  if (p.has('portcullis')) {
+    poly(k, [[90, 116], [166, 116], [166, 190], [90, 190]], '#2a2c32', false, { flat: true });
+    for (let i = 0; i < 6; i++) line(k, 98 + i * 13, 118, 98 + i * 13, 188, 3, METAL);
+    for (let i = 0; i < 4; i++) line(k, 92, 130 + i * 18, 164, 130 + i * 18, 3, METAL);
+  }
+  poly(k, [[40, 96], [82, 96], [78, 152], [36, 150]], shade(p.body, 0.05));
+  poly(k, [[174, 96], [216, 96], [220, 150], [178, 152]], shade(p.body, -0.1));
+  poly(k, [[34, 152], [78, 156], [72, 204], [30, 198]], shade(p.body, -0.15));
+  poly(k, [[180, 156], [224, 152], [228, 198], [184, 204]], shade(p.body, -0.2));
+  if (p.has('chains')) for (let i = 0; i < 8; i++) circle(k, 70 + i * 16, 140 + Math.sin(i) * 8, 5, METAL);
+  if (p.has('shield')) poly(k, [[6, 140], [48, 130], [54, 198], [28, 226], [2, 198]], '#5a5e66', true);
+  if (p.has('sword')) weaponSword(k, 230, 200, 0.2, 1.3);
+  poly(k, [[92, 44], [164, 44], [172, 98], [84, 98]], shade(p.body, 0.1));
+  poly(k, [[104, 66], [152, 66], [150, 80], [106, 80]], '#0a0a0e', false, { flat: true });
+  eye(k, 116, 73, 4.5, p.eye, 0); eye(k, 140, 73, 4.5, p.eye, 0);
+  if (p.has('helm')) poly(k, [[92, 44], [128, 24], [164, 44]], shade(p.body, 0.1));
+};
+
+const shadeF: Painter = (k, p) => {
+  const body: Pt[] = [...bez([128, 40], [90, 50], [86, 120], [70, 160], 8), [50, 190], [86, 180], [84, 250], [120, 210], [136, 252], [160, 206], [186, 244], [180, 176], [210, 190], ...bez([210, 190], [190, 150], [176, 56], [128, 40], 8)];
+  poly(k, body, shade(p.body, 0.1), false, { grad: 0.9 });
+  limb(k, 74, 128, 28, 168, 16, 6, p.body); limb(k, 182, 128, 226, 168, 16, 6, p.body);
+  for (const x of [18, 30, 40]) line(k, 28, 168, x, 190, 3, '#d8d0e8'); for (const x of [216, 226, 238]) line(k, 226, 168, x, 190, 3, '#d8d0e8');
+  eye(k, 114, 84, 6, p.eye, 1); eye(k, 142, 84, 6, p.eye, -1);
+  if (p.has('horns')) horns(k, 128, 56, 1.2, '#2a2230');
+  if (p.has('helm')) helm(k, 128, 70, 1.2, '#3a3a4a');
+  if (p.has('sword')) weaponSword(k, 232, 172, 0.3, 1.0, '#6a6a7a');
+  if (p.has('cape')) poly(k, [[160, 100], [200, 140], [196, 230], [160, 190]], shade(p.accent, -0.3), true);
+  if (p.has('eyes')) for (let i = 0; i < 3; i++) eye(k, 106 + i * 22, 126, 3.5, p.eye, 0);
+};
+
+const PAINTERS: Record<CreatureFamily, Painter> = {
+  goblin, archer, bat, orc, warg, troll, wraith, serpent, guardian, spider, drake, fiend, wisp, golem, horror, balrog, warden, shade: shadeF,
+};
+/** ghosts and flames fade away at their lower edge instead of standing on the floor */
+const FADES: Partial<Record<CreatureFamily, number>> = { wraith: 0.72, shade: 0.72, wisp: 0.8 };
+
+/** draw one creature natively at `n` x `n` pixels (a 256-unit drawing scaled down) */
+export function creatureImage(d: EnemyDef, n: number): PixImg {
+  const S = new Sprite(n, n); S.k = n / 256;
+  const pal: Pal = {
+    body: toHex(d.palette.body), accent: toHex(d.palette.accent), eye: toHex(d.palette.eye), gear: toHex(d.palette.gear),
+    has: (f) => !!d.features?.includes(f), seed: [...d.id].reduce((a, ch) => a + ch.charCodeAt(0), 0),
+  };
+  PAINTERS[d.family]({ S, xf: null }, pal);
+  const img = S.finish();
+  const fade = FADES[d.family];
+  if (fade !== undefined) {
+    const y0 = Math.round(n * fade);
+    for (let y = y0; y < n; y++) for (let x = 0; x < n; x++) {
+      if (bayer(x, y) < ((y - y0) / Math.max(1, n - y0)) * 1.05) { const i = (y * n + x) * 4; img.rgba[i + 3] = 0; if (img.normal) img.normal[i + 3] = 0; }
+    }
+  }
+  return img;
+}
+export function creatureCanvases(d: EnemyDef, n: number): { color: HTMLCanvasElement; normal: HTMLCanvasElement } {
+  const img = creatureImage(d, n);
+  return { color: toCanvas(img), normal: toCanvas(img, img.normal) };
+}
