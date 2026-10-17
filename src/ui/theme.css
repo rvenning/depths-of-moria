@@ -300,3 +300,9 @@ input[type='checkbox'] { accent-color: var(--gold); width: 1.2rem; height: 1.2re
 .dband:hover { box-shadow: inset 0 0 0 3px #ffe08a88; }
 .dband.cur { box-shadow: inset 0 0 0 4px var(--gold2); }
 .dband.lock .dlabel { opacity: 0.8; }
+
+/* ---------- walkable camp */
+.camp-hint { position: absolute; left: 8px; bottom: 6px; z-index: 2; font-size: 0.72rem; color: var(--dim); background: #120d1dcc; padding: 0 0.5rem; pointer-events: none; }
+.camp-hint b { color: var(--gold2); }
+.hot.near { --fc: var(--gold2); background: #3a2d56; transform: translate(-50%, -100%) scale(1.06); }
+.hot .key { background: var(--gold); color: #1d1204; padding: 0 0.35rem; font-weight: 700; border: 2px solid var(--edge); animation: csblink 0.9s steps(2) infinite; }

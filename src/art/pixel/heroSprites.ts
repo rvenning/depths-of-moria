@@ -21,12 +21,13 @@ type Pt = [number, number];
  * `up`/`lean` move the whole upper body, `hand`/`tip` the weapon hand and the weapon's tip, `rhand` the other hand,
  * `head` nods the head, `cape` swings the hem of a cloak or robe, `blink` closes the eyes.
  */
-export interface Pose { up?: number; lean?: number; hand?: Pt; tip?: Pt; rhand?: Pt; head?: Pt; cape?: number; blink?: boolean; open?: boolean }
+export interface Pose { stride?: number; up?: number; lean?: number; hand?: Pt; tip?: Pt; rhand?: Pt; head?: Pt; cape?: number; blink?: boolean; open?: boolean }
 
-export type HeroAnim = 'idle' | 'wind' | 'dash' | 'strike' | 'hurt' | 'cast' | 'win';
+export type HeroAnim = 'idle' | 'walk' | 'wind' | 'dash' | 'strike' | 'hurt' | 'cast' | 'win';
 /** the frames of each animation; the battle scene plays `idle` in a loop and the others on events */
 export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
   idle: [{}, { up: -1, cape: 1, hand: [0, -1], rhand: [0, -1] }, { up: -1, cape: 2, hand: [0, -1], rhand: [0, -1], head: [0, 1] }, { cape: 1, head: [0, 0], blink: true }],
+  walk: [{ stride: 3, lean: 1, cape: 1 }, { stride: 0, up: -1, lean: 1, cape: 2 }, { stride: -3, lean: 1, cape: 1 }, { stride: 0, up: -1, lean: 1, cape: 0 }],
   wind: [{ lean: -3, up: 1, hand: [-5, -7], tip: [-14, 10], rhand: [2, -2], head: [-1, 0], cape: 2 }],
   dash: [{ lean: 4, up: 1, hand: [3, 3], tip: [6, 14], rhand: [-3, 1], head: [2, 1], cape: -4 }, { lean: 5, up: 0, hand: [4, 2], tip: [8, 12], rhand: [-4, 0], head: [3, 0], cape: -5 }],
   strike: [{ lean: 5, up: 1, hand: [7, 3], tip: [14, 26], rhand: [-3, 0], head: [2, 1], cape: -3 }, { lean: 3, up: 1, hand: [5, 5], tip: [10, 30], rhand: [-2, 1], head: [1, 1], cape: -1 }],
@@ -34,6 +35,16 @@ export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
   cast: [{ lean: -1, up: 0, hand: [1, -7], tip: [3, -6], rhand: [2, -9], cape: 1 }, { lean: 1, up: -1, hand: [2, -10], tip: [4, -8], rhand: [3, -12], cape: 2 }],
   win: [{ up: -2, hand: [2, -13], tip: [-1, -12], rhand: [1, -13], head: [0, -1], cape: 2 }, { up: 0, hand: [2, -11], tip: [-1, -10], rhand: [1, -11], cape: 0 }],
 };
+
+/** a walking stride: parts named leg/boot/foot/feet A and B swing in opposite directions (feet move most; the forward foot lifts) */
+function applyStride(S: Sprite, d: number): void {
+  if (!d) return;
+  const re = /^(leg|boot|foot|feet)([AB])$/;
+  const shiftPts = (pts: Pt[], sign: number): Pt[] => pts.map(([x, y]) => [x + sign * d * Math.max(0, Math.min(1, (y - 56) / 24)), y - (sign * d > 0 ? 2 * Math.max(0, Math.min(1, (y - 70) / 12)) : 0)] as Pt);
+  const poly = S.poly.bind(S), ell = S.ell.bind(S);
+  S.poly = ((pts: Pt[], mat: string, o?: Parameters<Sprite['poly']>[2]) => { const m = o?.g ? re.exec(o.g) : null; return poly(m ? shiftPts(pts, m[2] === 'A' ? 1 : -1) : pts, mat, o); }) as Sprite['poly'];
+  S.ell = ((cx: number, cy: number, rx: number, ry: number, mat: string, o?: Parameters<Sprite['ell']>[5]) => { const m = o?.g ? re.exec(o.g) : null; const sg = m ? (m[2] === 'A' ? 1 : -1) : 0; return ell(cx + sg * d, cy - (sg * d > 0 ? 2 : 0), rx, ry, mat, o); }) as Sprite['ell'];
+}
 
 /** swing the part of a cloak below y0 sideways, more the lower it hangs */
 const sway = (pts: Pt[], amt: number, y0: number): Pt[] => pts.map(([x, y]) => [x + (y > y0 ? (amt * (y - y0)) / (82 - y0) : 0), y] as Pt);
@@ -53,6 +64,7 @@ const add = (a: Pt, b: Pt): Pt => [a[0] + b[0], a[1] + b[1]];
 function aragorn(P: Pose): PixImg {
   const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly(sway([[22, 28], [15, 38], [10, 58], [8, 80], [31, 81], [34, 58], [35, 30]], cape, 30), 'cloakGreen', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
   S.poly([[23, 50], [30, 50], [29, 74], [22, 74]], 'leather', { g: 'legA', bevel: 3 });
   S.poly([[30, 50], [39, 50], [41, 74], [31, 74]], 'leather', { g: 'legB', bevel: 3 });
@@ -81,6 +93,7 @@ function aragorn(P: Pose): PixImg {
 function gimli(P: Pose): PixImg {
   const { up, lean, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly([[21, 70], [31, 70], [30, 82], [19, 82]], 'leatherDark', { g: 'legA' }); S.poly([[33, 70], [45, 70], [47, 82], [34, 82]], 'leatherDark', { g: 'legB' });
   S.poly([[17, 76], [31, 76], [32, 83], [14, 83]], 'steelDark', { g: 'legA', bevel: 2 }); S.poly([[33, 76], [47, 76], [51, 83], [33, 83]], 'steelDark', { g: 'legB', bevel: 2 });
   S.at(lean, 8 + up);
@@ -106,6 +119,7 @@ function gimli(P: Pose): PixImg {
 function frodo(P: Pose): PixImg {
   const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly(sway([[22, 56], [15, 68], [13, 82], [46, 82], [44, 68], [40, 56]], cape, 58), 'hobCloak', { g: 'cloak', grad: 0.5, fold: { amp: 0.5, period: 7, angle: 0.15 }, bevel: 3 });
   S.poly([[26, 71], [31, 71], [31, 79], [26, 79]], 'tan', { g: 'legA' }); S.poly([[34, 71], [39, 71], [40, 79], [34, 79]], 'tan', { g: 'legB' });
   S.ell(28, 81, 7, 3, 'skin', { g: 'footA', bevel: 2 }); S.ell(41, 81, 7, 3, 'skin', { g: 'footB', bevel: 2 });
@@ -131,6 +145,7 @@ function frodo(P: Pose): PixImg {
 function legolas(P: Pose): PixImg {
   const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly(sway([[23, 27], [16, 36], [14, 58], [26, 56], [28, 30]], cape * 0.6, 40), 'elfCloak', { g: 'cloak', fold: { amp: 0.5, period: 6, angle: 0.1 }, bevel: 3 });
   S.poly([[26, 50], [32, 50], [31, 74], [26, 74]], 'tan', { g: 'legA' }); S.poly([[32, 50], [38, 50], [40, 74], [33, 74]], 'tan', { g: 'legB' });
   S.poly([[25, 60], [32, 60], [32, 82], [22, 82]], 'leatherDark', { g: 'bootA', bevel: 2.5 }); S.poly([[32, 60], [39, 60], [44, 82], [32, 82]], 'leatherDark', { g: 'bootB', bevel: 2.5 });
@@ -162,6 +177,7 @@ function legolas(P: Pose): PixImg {
 function boromir(P: Pose): PixImg {
   const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly(sway([[22, 28], [14, 40], [10, 60], [9, 80], [31, 81], [34, 58], [35, 30]], cape, 30), 'boroCloak', { g: 'cloak', grad: 0.6, fold: { amp: 0.6, period: 7, angle: 0.2 }, bevel: 3 });
   S.poly([[23, 50], [30, 50], [29, 74], [22, 74]], 'leatherDark', { g: 'legA', bevel: 3 }); S.poly([[30, 50], [39, 50], [41, 74], [31, 74]], 'leatherDark', { g: 'legB', bevel: 3 });
   S.poly([[22, 62], [30, 62], [30, 76], [21, 76]], 'steelDark', { g: 'legA', bevel: 2 }); S.poly([[30, 62], [40, 62], [42, 76], [31, 76]], 'steelDark', { g: 'legB', bevel: 2 });
@@ -194,6 +210,7 @@ function boromir(P: Pose): PixImg {
 function sam(P: Pose): PixImg {
   const { up, lean, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly([[26, 71], [31, 71], [31, 79], [26, 79]], 'tan', { g: 'legA' }); S.poly([[34, 71], [39, 71], [40, 79], [34, 79]], 'tan', { g: 'legB' });
   S.ell(28, 81, 7, 3, 'skin', { g: 'footA', bevel: 2 }); S.ell(41, 81, 7, 3, 'skin', { g: 'footB', bevel: 2 });
   for (const x of [24, 27, 30, 38, 41, 44]) S.dot(x, 80, '#a8714f');
@@ -220,6 +237,7 @@ function sam(P: Pose): PixImg {
 function gandalf(P: Pose): PixImg {
   const { up, lean, cape, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
+  applyStride(S, P.stride ?? 0);
   S.poly(sway([[21, 46], [46, 46], [53, 82], [13, 82]], cape, 50), 'robe', { g: 'robe', bevel: 7, grad: 0.7, fold: { amp: 0.55, period: 6, angle: 1.5 } });
   S.poly([[22, 80], [32, 80], [32, 84], [19, 84]], 'leatherDark', { g: 'feetA' }); S.poly([[34, 80], [45, 80], [48, 84], [34, 84]], 'leatherDark', { g: 'feetB' });
   S.at(lean, 8 + up);

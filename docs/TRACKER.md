@@ -71,4 +71,5 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [x] Illustrated descent map on the Delve screen (replaces the chapter list): a cutaway of the mountain with the West-gate, ten strata each showing its own backdrop, a winding path, cleared/current/locked states, an animated banner and a selection halo (`art/descentMap.ts`).
 - [x] Richer attack animation: a forward-leaning dash into melee, a two-frame strike with follow-through; ensemble stereo placement in the music.
 - [~] Optional spoken dialogue in cutscenes (browser speech synthesis, a pitch per hero; quality depends on the device, so it is off by default).
-- Still not matched, and not claimed: hand-drawn sprite sheets with many frames per character, 3D diorama environments, a recorded orchestral soundtrack, professional voice acting, a walkable overworld, per-character campaigns.
+- [x] Walkable camp: the lead hero walks (arrow keys, WASD or click) with the party trailing on a four-frame walk cycle, and E enters the facility they stand at.
+- Still not matched, and not claimed: hand-drawn sprite sheets with many frames per character, 3D diorama environments, a recorded orchestral soundtrack, professional voice acting, a full explorable world map (the camp is walkable, the dungeon is not), per-character campaigns.

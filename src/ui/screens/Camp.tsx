@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CAMP_SPOTS, animateCamp } from '../../art/camp.ts';
+import { CAMP_H, CAMP_SPOTS, CAMP_W, animateCamp, type CampController } from '../../art/camp.ts';
 import { CAMP_UPGRADES } from '../../content/camp.ts';
 import { CHAPTER_BY_N } from '../../content/chapters.ts';
 import { HEROES } from '../../content/heroes.ts';
@@ -33,14 +33,35 @@ const HOT: { id: string; label: string; icon: string; screen: 'map' | 'roster' |
 export function CampScreen() {
   const s = useGame();
   const ref = useRef<HTMLCanvasElement>(null);
+  const walker = useRef<CampController | null>(null);
+  const [near, setNear] = useState<string | null>(null);
   const [tab, setTab] = useState<'facilities' | 'merchant' | 'training' | 'legacy' | 'guide'>('facilities');
   const [showDescent, setShowDescent] = useState(false);
   const ids = useMemo(() => formation(s).map((f) => f.id), [s.party, s.heroes, s.age]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const c = ref.current; if (!c) return;
-    return animateCamp(c, s.age, ids, s.settings.reducedMotion);
+    const ctl = animateCamp(c, s.age, ids, s.settings.reducedMotion, setNear);
+    walker.current = ctl;
+    return () => { ctl.stop(); walker.current = null; };
   }, [s.age, ids, s.settings.reducedMotion]);
+
+  // walking: arrow keys / WASD hold a direction, E enters the facility the leader stands at
+  useEffect(() => {
+    const held = { l: false, r: false, u: false, d: false };
+    const apply = () => walker.current?.setDir((held.r ? 1 : 0) - (held.l ? 1 : 0), (held.d ? 1 : 0) - (held.u ? 1 : 0));
+    const busy = (e: KeyboardEvent) => !!document.querySelector('.scrim, .cutscene') || (e.target as HTMLElement)?.matches?.('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey;
+    const map: Record<string, 'l' | 'r' | 'u' | 'd'> = { arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r', arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd' };
+    const down = (e: KeyboardEvent) => {
+      if (busy(e)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'e') { const id = walker.current?.near(); const h = HOT.find((x) => x.id === id); if (h) { e.preventDefault(); store.go(h.screen); } return; }
+      if (map[k]) { e.preventDefault(); held[map[k]] = true; apply(); }
+    };
+    const up = (e: KeyboardEvent) => { const k = map[e.key.toLowerCase()]; if (k) { held[k] = false; apply(); } };
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); walker.current?.setDir(0, 0); };
+  }, []);
 
   const preview = descentPreview(s);
   const canDescend = preview.canDescend;
@@ -55,13 +76,14 @@ export function CampScreen() {
       <div className="two" style={{ gridTemplateColumns: 'minmax(0,1.9fr) minmax(0,1fr)' }}>
         <div className="camp">
           <div className="scene">
-            <canvas ref={ref} aria-hidden="true" />
+            <canvas ref={ref} aria-hidden="true" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); walker.current?.moveTo(((e.clientX - r.left) / r.width) * CAMP_W, ((e.clientY - r.top) / r.height) * CAMP_H); }} style={{ pointerEvents: 'auto', cursor: 'pointer' }} />
+            <div className="camp-hint">Walk: arrow keys / WASD or click the floor · <b>E</b> enters</div>
             {HOT.map((h) => {
               const sp = CAMP_SPOTS[h.id];
               const locked = h.id === 'forge' && maxChapterReached(s) < 3;
               return (
-                <button key={h.id} className="hot" style={{ left: `${sp.x * 100}%`, top: `${sp.y * 100}%` }} onClick={() => store.go(h.screen)} aria-label={h.label + (locked ? ' (locked)' : '')}>
-                  <Icon k={locked ? 'lock' : h.icon} /> <span className="hotlbl">{h.label}</span>
+                <button key={h.id} className={`hot ${near === h.id ? 'near' : ''}`} style={{ left: `${sp.x * 100}%`, top: `${sp.y * 100}%` }} onClick={() => store.go(h.screen)} aria-label={h.label + (locked ? ' (locked)' : '')}>
+                  <Icon k={locked ? 'lock' : h.icon} /> <span className="hotlbl">{h.label}</span>{near === h.id && <span className="key">E</span>}
                   {h.id === 'quests' && quests > 0 && <span className="badge gold">{quests}</span>}
                 </button>
               );

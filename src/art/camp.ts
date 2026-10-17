@@ -124,22 +124,64 @@ export function ditherLight(radius: number, color = '#ff963c'): HTMLCanvasElemen
 }
 
 const CAMP_SEATS: [number, number][] = [[0.40, 0.80], [0.52, 0.80], [0.64, 0.80], [0.34, 0.95], [0.58, 0.95]];
+const WALK_BOUNDS = { x0: 70, x1: 890, y0: 336, y1: 462 };
+
+/** the handle the camp screen uses to walk the lead hero around */
+export interface CampController {
+  stop: () => void;
+  /** walk the leader to a point on the scene (960 x 480 space) */
+  moveTo: (x: number, y: number) => void;
+  /** hold a direction (-1, 0 or 1 on each axis); (0, 0) to stop */
+  setDir: (dx: number, dy: number) => void;
+  /** which facility the leader is standing at (and so which one E would enter) */
+  near: () => string | null;
+}
 
 /**
  * Bring the camp to life on a canvas: the party breathes and blinks around a crackling fire whose light flickers on the
- * scene, with embers drifting up. Returns a function that stops it. With reduced motion it paints one still frame.
+ * scene, with embers drifting up. The lead hero can be walked around (the rest follow in a line, on a walk cycle) and
+ * stops at a facility to enter it. Returns a controller; with reduced motion nothing idles, but walking still works.
  */
-export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroId[], reduced: boolean): () => void {
+export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroId[], reduced: boolean, onNear?: (id: string | null) => void): CampController {
   cv.width = CAMP_W; cv.height = CAMP_H;
   const ctx = cv.getContext('2d') as CanvasRenderingContext2D; ctx.imageSmoothingEnabled = false;
   const base = campBase(chapter), flame = previewFrames('flame'), light = ditherLight(60);
   const fireX = Math.round((CAMP_W * 0.5) / PIX) * PIX, fireY = Math.round((CAMP_H * 0.7 + 78) / PIX) * PIX;
-  const seated = party.slice(0, 5).map((id, i) => ({ id, x: Math.round((CAMP_W * CAMP_SEATS[i][0]) / PIX) * PIX, y: Math.round((CAMP_H * CAMP_SEATS[i][1]) / PIX) * PIX, phase: (i * 677) % 1900 }));
-  seated.sort((a, b) => a.y - b.y);
+  const people = party.slice(0, 5).map((id, i) => ({ id, x: CAMP_W * CAMP_SEATS[i][0], y: CAMP_H * CAMP_SEATS[i][1], phase: (i * 677) % 1900, face: 1, walking: false }));
+  const trail: [number, number][] = [];
   const embers: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
-  const t0 = performance.now();
-  const frame = (): void => {
-    const t = reduced ? 0 : performance.now() - t0;
+  const dir = { x: 0, y: 0 }; let target: [number, number] | null = null; let near: string | null = null; let moved = false;
+  const t0 = performance.now(); let last = t0;
+  const nearest = (): string | null => {
+    const lead = people[0]; if (!lead) return null;
+    let best: string | null = null, bd = 78;
+    for (const [id, sp] of Object.entries(CAMP_SPOTS)) { const d = Math.abs(lead.x + (HERO_W * PIX) / 2 - sp.x * CAMP_W); if (d < bd) { bd = d; best = id; } }
+    return moved ? best : null;
+  };
+  const step = (dt: number): void => {
+    const lead = people[0]; if (!lead) return;
+    let dx = dir.x, dy = dir.y;
+    if (!dx && !dy && target) {
+      const tx = target[0] - (HERO_W * PIX) / 2, ty = target[1], ddx = tx - lead.x, ddy = ty - lead.y, dist = Math.hypot(ddx, ddy);
+      if (dist < 5) target = null; else { dx = ddx / dist; dy = ddy / dist; }
+    }
+    const walking = !!(dx || dy);
+    if (walking) {
+      const n = Math.hypot(dx, dy) || 1, sp = 150 * dt / 1000;
+      lead.x = Math.max(WALK_BOUNDS.x0, Math.min(WALK_BOUNDS.x1, lead.x + (dx / n) * sp)); lead.y = Math.max(WALK_BOUNDS.y0, Math.min(WALK_BOUNDS.y1, lead.y + (dy / n) * sp));
+      if (dx) lead.face = dx > 0 ? 1 : -1;
+      moved = true; trail.push([lead.x, lead.y]); if (trail.length > 400) trail.shift();
+    }
+    lead.walking = walking;
+    people.slice(1).forEach((p, k) => {
+      if (!moved) return;
+      const tr = trail[Math.max(0, trail.length - 1 - (k + 1) * 26)] ?? [p.x, p.y], ox = tr[0] - p.x, oy = tr[1] - p.y;
+      p.walking = Math.hypot(ox, oy) > 3; if (ox) p.face = ox > 0 ? 1 : -1;
+      p.x += ox * 0.35; p.y += oy * 0.35;
+    });
+    const nn = nearest(); if (nn !== near) { near = nn; onNear?.(near); }
+  };
+  const draw = (t: number): void => {
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     ctx.drawImage(base, 0, 0);
     ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = reduced ? 0.3 : 0.27 + 0.07 * Math.sin(t / 85) + 0.04 * Math.sin(t / 31);
@@ -148,14 +190,16 @@ export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroI
     let fireDone = false;
     const drawFire = (): void => {
       fireDone = true;
-      const fr = flame[Math.floor(t / 75) % flame.length];
+      const fr = flame[reduced ? 0 : Math.floor(t / 75) % flame.length];
       ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(fr, fireX - (fr.width * PIX) / 2, fireY - fr.height * PIX + 6, fr.width * PIX, fr.height * PIX);
       ctx.globalCompositeOperation = 'source-over';
     };
-    for (const h of seated) {
-      if (!fireDone && h.y > fireY) drawFire();
-      const f = heroFrame(h.id, 'idle', reduced ? 0 : Math.floor((t + h.phase) / 260) % 4).color;
-      ctx.drawImage(f, h.x - (HERO_W * PIX) / 2, h.y - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
+    for (const h of [...people].sort((a, b) => a.y - b.y)) {
+      const hy = Math.round(h.y / PIX) * PIX, hx = Math.round(h.x / PIX) * PIX;
+      if (!fireDone && hy > fireY) drawFire();
+      const f = h.walking ? heroFrame(h.id, 'walk', Math.floor(t / 120) % 4).color : heroFrame(h.id, 'idle', reduced ? 0 : Math.floor((t + h.phase) / 260) % 4).color;
+      if (h.face < 0) { ctx.save(); ctx.translate(hx + HERO_W * PIX, 0); ctx.scale(-1, 1); ctx.drawImage(f, 0, hy - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX); ctx.restore(); }
+      else ctx.drawImage(f, hx, hy - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
     }
     if (!fireDone) drawFire();
     if (!reduced) {
@@ -168,9 +212,14 @@ export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroI
       }
       ctx.globalAlpha = 1;
     }
+    // the stop where the leader stands: a small gold arrow over the facility's hotspot position is drawn by the screen's own button
   };
-  frame();
-  if (reduced) return () => undefined;
-  const id = window.setInterval(frame, 80);
-  return () => window.clearInterval(id);
+  draw(0);
+  const id = window.setInterval(() => { const now = performance.now(); step(now - last); last = now; draw(reduced ? 0 : now - t0); }, 50);
+  return {
+    stop: () => window.clearInterval(id),
+    moveTo: (x, y) => { target = [x, Math.max(WALK_BOUNDS.y0, Math.min(WALK_BOUNDS.y1, y))]; },
+    setDir: (dx, dy) => { dir.x = dx; dir.y = dy; if (dx || dy) target = null; },
+    near: () => near,
+  };
 }
