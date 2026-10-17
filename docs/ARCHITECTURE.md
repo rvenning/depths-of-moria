@@ -14,7 +14,7 @@ content/      pure data: heroes, skills, enemies, items, relics, events, lore, q
 core/         pure logic, no DOM: rng, stats, battle engine, floors, loot, economy,
               progression, expedition, ages, game reducers, balance config
 persistence/  IndexedDB (localStorage fallback), versioned schema, migrations, export/import
-audio/        WebAudio synth: music director + SFX + volume buses
+audio/        sampled-score player (falls back to the WebAudio synth) + SFX + volume buses
 art/          pixel engine (pixel/engine.ts), hero rigs (heroSprites.ts), creature drawings (creatureSprites.ts), effect frames (fxFrames.ts), vector painters for backgrounds/camp that are pixelised (pixelize.ts), animated camp and title scenes, icons, sprite cache
 ui/           React screens/components, battle canvas view, hooks
 tools/        balance simulation CLI, icon generator
@@ -40,6 +40,6 @@ One serialisable `GameState`; every mutation is a pure function `(state, args) =
 See `src/content/schema.ts` (types) — every content table is `Record<Id, Def>` validated by `tests/content.test.ts` (referential integrity, counts vs. the spec's minimums, every skill has an effect and a tooltip).
 
 ## Asset plan
-No external assets. Art: a pixel-art look ("Pixel Delve"): heroes are drawn natively with a small pixel engine (shape masks, inflate-shaded, hue-shifted ramps, ordered dither, outlines); creatures, rooms and the camp are painted procedurally and then pixelised; UI frames are notched 4px borders. Audio: synthesised pads/plucks (original, generative per chapter) and SFX. Font: Jersey 15, bundled. Manifest of everything in `docs/ASSETS.md`.
+Offline-rendered assets: the music (`tools/music`) and the chapter-1 backdrops (`tools/backdrop`); everything else is generated at runtime. Art: a pixel-art look ("Pixel Delve"): heroes are drawn natively with a small pixel engine (shape masks, inflate-shaded, hue-shifted ramps, ordered dither, outlines); creatures, rooms and the camp are painted procedurally and then pixelised; UI frames are notched 4px borders. Audio: synthesised pads/plucks (original, generative per chapter) and SFX. Font: Jersey 15, bundled. Manifest of everything in `docs/ASSETS.md`.
 
 ## Milestones → see TRACKER.md

@@ -52,7 +52,8 @@ export function App() {
     r.dataset.contrast = s.settings.highContrast ? 'high' : 'normal';
     r.dataset.motion = s.settings.reducedMotion ? 'reduced' : 'normal';
     audio.configure(s.settings);
-  }, [s.settings.textScale, s.settings.highContrast, s.settings.reducedMotion, s.settings.master, s.settings.music, s.settings.sfx, s.settings.ambience]);
+    audio.setSampled(s.settings.sampledMusic !== false);
+  }, [s.settings.sampledMusic, s.settings.textScale, s.settings.highContrast, s.settings.reducedMotion, s.settings.master, s.settings.music, s.settings.sfx, s.settings.ambience]);
 
   // music follows the screen
   useEffect(() => {

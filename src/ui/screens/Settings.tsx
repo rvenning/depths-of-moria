@@ -38,7 +38,8 @@ export function SettingsScreen() {
             <Slider label="Sound effects" value={st.sfx} onChange={(v) => { set({ master: st.master, sfx: v }); sfx.resume(); sfx.hit(); }} />
             <Slider label="Ambience" value={st.ambience} onChange={(v) => set({ ambience: v })} />
             <button className="btn small" aria-pressed={muted} onClick={() => { setMuted(!muted); audio.setMuted(!muted); }}><Icon k={muted ? 'mute' : 'sound'} /> {muted ? 'Unmute' : 'Mute all'}</button>
-            <p className="tiny dim">All music and effects are synthesised on your device: original and offline.</p>
+            <label className="check"><input type="checkbox" checked={st.sampledMusic !== false} onChange={(e) => set({ sampledMusic: e.target.checked })} /> Orchestral score (sampled; off = the lightweight built-in synth)</label>
+            <p className="tiny dim">The score is original; it is rendered through a free orchestral soundfont. Effects and ambience are synthesised on your device.</p>
           </div>
         </Section>
         <Section title="Battle">

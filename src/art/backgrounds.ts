@@ -19,6 +19,8 @@ export interface BgLayers {
   theme: string;
   variant: string;
   particles: 'embers' | 'dust' | 'mist' | 'bubbles' | 'sparks' | 'motes';
+  /** the layers carry their own baked lighting (a rendered room), so the scene lights only the sprites, not the backdrop */
+  baked?: boolean;
 }
 
 interface Pal { sky: string; far: string; mid: string; near: string; light: string; fog: string }
@@ -292,9 +294,23 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   const key = `${chapter}:${variant}`;
   const hit = pcache.get(key);
   if (hit) return hit;
-  const v = paintBackgroundVector(chapter, variant, seed);
   const nw = BG_W / PIX, nh = BG_H / PIX;
   const px = (cv: HTMLCanvasElement, o: { levels: number; dither: number; alphaDither?: boolean }): HTMLCanvasElement => padCanvas(pixelize(cv, { outW: nw, outH: nh, ...o }), BG_PAD);
+  const rs = rendered.get(key);
+  if (rs) {
+    // a modelled room: more tones than the painted ones (it carries real lighting), the same pixel grid, dither and depth of field
+    const th = CHAPTER_BY_N(chapter).theme;
+    const layers: BgLayers = {
+      far: depthBlur(px(rs.far, { levels: 14, dither: 0.5 }), { all: 0.7, edge: 1.8 }),
+      mid: depthBlur(px(rs.mid, { levels: 12, dither: 0.4, alphaDither: true }), { all: 0.3, edge: 1.6 }),
+      floor: depthBlur(px(rs.floor, { levels: 14, dither: 0.5 }), { edge: 1.8, band: [0.22, 0.6] }),
+      near: depthBlur(px(rs.near, { levels: 10, dither: 0.4, alphaDither: true }), { all: 1.4 }),
+      lights: rs.lights, theme: th, variant, particles: 'dust', baked: true,
+    };
+    pcache.set(key, layers); porder.push(key);
+    return layers;
+  }
+  const v = paintBackgroundVector(chapter, variant, seed);
   const layers: BgLayers = {
     // HD-2D depth of field: the far wall is soft, every layer defocuses toward the top and bottom edges, the foreground frame is blurred
     far: depthBlur(px(v.far, { levels: 9, dither: 0.9 }), { all: 1.3, edge: 2.6 }),
@@ -306,6 +322,28 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   pcache.set(key, layers); porder.push(key);
   while (porder.length > 6) pcache.delete(porder.shift() as string);
   return layers;
+}
+
+// ------------------------------------------------------------------ rendered backdrops
+/** Blender-rendered, lit room layers (tools/backdrop, public/backdrops). Where a set exists it replaces the painted layers. */
+interface RenderedSet { far: HTMLCanvasElement; mid: HTMLCanvasElement; floor: HTMLCanvasElement; near: HTMLCanvasElement; lights: Light[] }
+const rendered = new Map<string, RenderedSet>();
+let renderedLoad: Promise<void> | null = null;
+export function loadRenderedBackdrops(): Promise<void> {
+  renderedLoad ??= (async () => {
+    const base = ((import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './') + 'backdrops/';
+    const res = await fetch(base + 'manifest.json');
+    if (!res.ok) return;
+    const man = (await res.json()) as Record<string, { name: string; lights: Light[] }>;
+    const img = (url: string): Promise<HTMLCanvasElement> => new Promise((ok, fail) => {
+      const im = new Image(); im.onload = () => { const c = makeCanvas(BG_W, BG_H); ctx2d(c).drawImage(im, 0, 0, BG_W, BG_H); ok(c); }; im.onerror = () => fail(new Error(url)); im.src = url;
+    });
+    for (const [key, e] of Object.entries(man)) {
+      const [far, mid, floor, near] = await Promise.all(['far', 'mid', 'floor', 'near'].map((l) => img(`${base}${e.name}-${l}.webp`)));
+      rendered.set(key, { far, mid, floor, near, lights: e.lights });
+    }
+  })().catch(() => { /* the painted backdrops stay in use */ });
+  return renderedLoad;
 }
 
 export const BG_VARIANT_KEYS = ['hall', 'corridor', 'cavern', 'stair', 'vault', 'bridge', 'shrine', 'arena'];

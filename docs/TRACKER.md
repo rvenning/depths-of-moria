@@ -35,7 +35,7 @@ Progression-bot campaign: about 37 h at 1×, about 22 h at the default 2×, insi
 The numbers come from a bot that plays each floor once and spends as it earns, so treat them as a lower bound for a human. Real playtests still have to confirm the spec's 20–40 h.
 
 ## Caveats and remaining work
-- [~] Audio is synthesised (WebAudio) and was checked only by code and test, never listened to. Expect to tune mix and music taste by ear.
+- [~] Music is now sampled (see the Quality pass below); effects and ambience are still synthesised. Neither has been listened to by the author: levels and format are checked by tools, so the mix and taste need a human ear.
 - [~] Phaser battle pacing and animation feel were verified in real Chrome only; the in-app preview pane throttles requestAnimationFrame to about 1 fps. Measured about 56 fps in Chrome.
 - [~] Art is procedural, not hand-drawn. Similar creature families (troll/orc variants) share body plans and could use more silhouette variety.
 - [~] Multi-hour feel (pacing of the later Ages, whether the grind is fun) is unvalidated by a human player.
@@ -73,3 +73,9 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [~] Optional spoken dialogue in cutscenes (browser speech synthesis, a pitch per hero; quality depends on the device, so it is off by default).
 - [x] Walkable camp: the lead hero walks (arrow keys, WASD or click) with the party trailing on a four-frame walk cycle, and E enters the facility they stand at.
 - Still not matched, and not claimed: hand-drawn sprite sheets with many frames per character, 3D diorama environments, a recorded orchestral soundtrack, professional voice acting, a full explorable world map (the camp is walkable, the dungeon is not), per-character campaigns.
+
+## Quality pass — sampled score, modelled backdrops, more animation (2026-10-18)
+- [x] **Sampled orchestral score**: 40 tracks (10 chapters × title/camp/battle/boss) rendered offline from the existing composer through the MuseScore_General Lite soundfont (MIT). Loudness −17.0 LUFS on every track; decode, dropout, click-at-seam and level-step checks pass for all 40 in Chrome (`tools/music/verify.cjs`). Licence recorded in `docs/RIGHTS.md` and `public/music/LICENSES.txt`. The synth remains the fallback (missing/undecodable track, or *Orchestral score* off in Settings; `tools/sampled-probe.cjs` checks both paths).
+- [~] The music has not been auditioned by a person (levels and format only). The 96 kbps MP3 and the free GM soundfont will sound like a good general-MIDI orchestra, not a recorded one.
+- [x] **Modelled backdrops** (Blender 4.5): chapter 1's hall and its boss arena, four lit layers each, running at 50–56 fps in the real battle scene (same range as before). Other chapters still use the painted rooms; extending the Blender recipe to them is the remaining work.
+- [x] **Animation**: every hero has two distinct melee attacks (`strike` the downward chop, `thrust` the level lunge, with per-hero variants: Legolas draws and looses, Gandalf thrusts the staff) and two distinct casts (`cast`, `cast2`); battle alternates them. A unit test asserts the pairs are visibly different for all 7 heroes; `#gallery/atk` is the contact sheet. Enemies got a two-frame step cycle for their advance.

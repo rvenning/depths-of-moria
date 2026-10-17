@@ -10,7 +10,8 @@
 | Enemy roster (80 creatures), boss mechanics, chapter concepts, Age mechanic | Original design (the ten chapters are "original game-design chapter concepts, not claims about canon") |
 | 130 items, 10 sets, affixes, events, quests, achievements, lore entries, bond scenes | Original writing. No sentences, dialogue or song lyrics are taken from any book or film. Two lines that were too close to well-known quotations were rewritten during review. |
 | Art | Painted procedurally in code in an original stylised look. No film likenesses, no imported or ripped images. |
-| Music and sound | Synthesised on-device (WebAudio). No copyrighted soundtrack, no samples. |
+| Music | The score is original (composed in code, `src/audio/score.ts`). The shipped tracks in `public/music/` are that score rendered offline (`tools/music/render-music.ts`) through the **MuseScore_General (Lite)** SoundFont, so they contain instrument samples. Licence below. |
+| Sound effects and ambience | Synthesised on-device (WebAudio). No samples. |
 | Soda Dungeon | Inspiration only (long-form auto-battle progression). No code or assets used. |
 | Money | No real-money currency, monetisation, gacha or backend. |
 
@@ -34,6 +35,19 @@ For a public release, the recommended path is:
 1. Make "Original" the default (`defaultSettings().naming`), remove the "Fan concept" option and the restricted strings from the source (the table's left-hand side is the exact worklist).
 2. Replace the seven hero palettes' silhouettes' accessories that echo known imagery if desired (hat, horn, axe) — they are generic fantasy shapes, but a legal review should decide.
 3. Re-run `npm test` (the content tests assert counts, not names).
+
+## Sampled music: soundfont licence
+
+| | |
+|---|---|
+| Soundfont | MuseScore_General (Lite), as packaged on npm in `@librescore/sf3` (package licence MIT), by S. Christian Collins; Debian packaging by mirabilos |
+| Licence | **MIT**, with parts public domain or CC0: MuseScore Drumline samples (CC0, S. Christian Collins & Amir Oosman), Splendid Grand Piano (public domain), marching cymbals from the Versilian Community Sample Library (CC0, Sam Gossner). It also includes parts of Fluid (R3) GM (MIT, Frank Wen; mono version Michael Cowgill; Temple Blocks Ethan Winer; Drumline cymbals Michael Schorsch). |
+| Permits | Use, copy, modify, merge, publish, distribute, sublicense and sell, including in rendered audio, on condition that the copyright and permission notice stay with the software. |
+| What we ship | Only rendered MP3 audio, not the soundfont itself. The notices are reproduced in `public/music/LICENSES.txt`, which is served next to the tracks, and in the credits. |
+| Renderer | `spessasynth_core` (Apache-2.0) and `@breezystack/lamejs` (LGPL, used only offline at build time; it is not shipped) |
+| Fallback | The runtime synth still plays if a track is missing, fails to decode, or the player turns off *Orchestral score* in Settings. |
+
+This is a record of the licence text as found in the package, not legal advice.
 
 ## Credits
 See `ASSETS.md` for libraries, fonts and licences, and the in-game Credits screen (`Credits & rights` on the title screen and in Settings).

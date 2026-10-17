@@ -17,7 +17,7 @@ const CREDITS: [string, string[]][] = [
   ['Design & Code', ['Claude Code', 'from a complete design handoff']],
   ['Engine', ['Deterministic seeded battle simulation', 'Initiative gauge · rows · statuses · boss phases']],
   ['Art', ['Procedural painters: heroes, 80 creatures, ten chapters of rooms', 'All art generated in code']],
-  ['Music & Sound', ['Generative score per chapter', 'Synthesised effects and ambience']],
+  ['Music & Sound', ['Original score per chapter, played by the MuseScore General soundfont', 'Synthesised effects and ambience']],
   ['Text', ['Lore, events, quests and bond scenes — original writing']],
   ['Built with', ['Phaser 4 · React · TypeScript · Vite']],
   ['Rights', ['A private fan-game concept', 'Not for distribution without permission', 'A clean original reskin is built in']],

@@ -26,10 +26,11 @@ export function mountGallery(root: HTMLElement): void {
     }
     return;
   }
-  if (arg === 'anim') {
+  if (arg === 'anim' || arg === 'atk') {
+    const shown = (Object.keys(HERO_ANIMS) as HeroAnim[]).filter((a) => arg === 'anim' || ['dash', 'strike', 'thrust', 'cast', 'cast2'].includes(a));   // atk: the attack animations only
     for (const hero of HERO_LIST) {
       const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:2px;align-items:flex-end;margin:2px 0;background:#262033';
-      for (const a of Object.keys(HERO_ANIMS) as HeroAnim[]) for (let n = 0; n < HERO_ANIMS[a].length; n++) {
+      for (const a of shown) for (let n = 0; n < HERO_ANIMS[a].length; n++) {
         const cv = heroFrame(hero.id, a, n).color; const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d')?.drawImage(cv, 0, 0);
         c.style.cssText = 'width:' + cv.width * 2 + 'px;height:' + cv.height * 2 + 'px;image-rendering:pixelated'; c.title = hero.id + ' ' + a + n; row.appendChild(c);
       }

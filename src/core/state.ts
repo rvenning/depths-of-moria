@@ -18,6 +18,8 @@ export interface HeroState {
 
 export interface Settings {
   master: number; music: number; sfx: number; ambience: number;
+  /** play the sampled orchestral score (default); false = the runtime synth */
+  sampledMusic?: boolean;
   reducedMotion: boolean; highContrast: boolean; textScale: number;
   speed: 1 | 2 | 4; showLog: boolean;
   naming: 'fan' | 'original';

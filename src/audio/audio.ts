@@ -1,6 +1,6 @@
 /**
- * Procedural audio: a generative score per chapter, synthesised SFX and an ambience bed.
- * Everything is original and made at runtime with WebAudio — no samples, no copyrighted music.
+ * Audio: a sampled orchestral score per chapter and mood (rendered offline from the same composer through the MuseScore General
+ * soundfont; see tools/music and docs/RIGHTS.md), with the runtime synth as the fallback, plus synthesised SFX and an ambience bed.
  * Independent sliders: master, music, sfx, ambience.
  */
 import { CHAPTER_BY_N } from '../content/chapters.ts';
@@ -8,6 +8,9 @@ import type { Settings } from '../core/state.ts';
 import { compose, type Score, type ScoreNote } from './score.ts';
 
 type Mood = 'camp' | 'battle' | 'boss' | 'title';
+
+interface TrackInfo { file: string; sampleRate: number; preroll: number; length: number }
+interface MusicManifest { encoderDelay: number; [key: string]: TrackInfo | number }
 
 class AudioEngine {
   ctx: AudioContext | null = null;
@@ -22,6 +25,11 @@ class AudioEngine {
   private amb: { src: AudioBufferSourceNode; g: GainNode; f: BiquadFilterNode } | null = null;
   private dripTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSfx: Record<string, number> = {};
+  private sampledOn = true;
+  private manifest: Promise<MusicManifest | null> | null = null;
+  private tracks = new Map<string, Promise<{ buf: AudioBuffer; info: TrackInfo; delay: number } | null>>();
+  private sampled: { src: AudioBufferSourceNode; g: GainNode } | null = null;
+  private playToken = 0;
 
   ensure(): AudioContext | null {
     if (this.ctx) return this.ctx;
@@ -64,6 +72,12 @@ class AudioEngine {
     this.vol = { master: s.master, music: s.music, sfx: s.sfx, ambience: s.ambience };
     this.apply();
   }
+  /** use the sampled orchestral tracks (default) or only the synth */
+  setSampled(on: boolean): void {
+    if (on === this.sampledOn) return;
+    this.sampledOn = on;
+    if (this.ctx && this.active) { const c = this.chapter, m = this.mood; this.mood = '' as Mood; this.playMusic(c, m); }
+  }
   setMuted(m: boolean): void { this.muted = m; this.apply(); }
   private apply(): void {
     if (!this.ctx) return;
@@ -77,21 +91,70 @@ class AudioEngine {
   // ------------------------------------------------------------------ music
   playMusic(chapter: number, mood: Mood): void {
     const c = this.ensure(); if (!c) return;
-    const changed = chapter !== this.chapter || mood !== this.mood || !this.timer;
+    const changed = chapter !== this.chapter || mood !== this.mood || !this.active;
     this.chapter = chapter; this.mood = mood;
     if (!changed) return;
-    this.startDrone();
+    this.active = true;
+    const token = ++this.playToken;
     this.startAmbience();
+    this.halt(false);
+    if (!this.sampledOn) { this.startSynth(); return; }
+    void this.loadTrack(chapter, mood).then((t) => {
+      if (token !== this.playToken) return;                      // the screen moved on while it loaded
+      if (t && this.startSampled(t)) return;
+      this.startSynth();
+    });
+  }
+  stopMusic(): void {
+    this.active = false; this.playToken++;
+    this.halt(true);
+    const c = this.ctx;
+    if (c && this.amb) { this.amb.g.gain.setTargetAtTime(0, c.currentTime, 0.3); const a = this.amb; setTimeout(() => { try { a.src.stop(); } catch { /* */ } }, 1500); this.amb = null; }
+    if (this.dripTimer) { clearTimeout(this.dripTimer); this.dripTimer = null; }
+  }
+  private active = false;
+
+  /** fade out whatever music is playing (the sampled track and the synth) */
+  private halt(_final: boolean): void {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    const c = this.ctx; if (!c) return;
+    if (this.drone) { this.drone.g.gain.setTargetAtTime(0, c.currentTime, 0.3); const d = this.drone; setTimeout(() => d.o.forEach((o) => { try { o.stop(); } catch { /* */ } }), 1500); this.drone = null; }
+    if (this.sampled) { const s = this.sampled; s.g.gain.setTargetAtTime(0, c.currentTime, 0.25); setTimeout(() => { try { s.src.stop(); } catch { /* */ } }, 1500); this.sampled = null; }
+  }
+  private startSynth(): void {
+    const c = this.ctx; if (!c) return;
+    this.startDrone();
     this.scoreKey = '';
     this.nextStep = c.currentTime + 0.1;
     if (!this.timer) this.timer = setInterval(() => this.schedule(), 100);
   }
-  stopMusic(): void {
-    if (this.timer) { clearInterval(this.timer); this.timer = null; }
-    const c = this.ctx;
-    if (c && this.drone) { this.drone.g.gain.setTargetAtTime(0, c.currentTime, 0.3); const d = this.drone; setTimeout(() => d.o.forEach((o) => { try { o.stop(); } catch { /* */ } }), 1500); this.drone = null; }
-    if (c && this.amb) { this.amb.g.gain.setTargetAtTime(0, c.currentTime, 0.3); const a = this.amb; setTimeout(() => { try { a.src.stop(); } catch { /* */ } }, 1500); this.amb = null; }
-    if (this.dripTimer) { clearTimeout(this.dripTimer); this.dripTimer = null; }
+
+  private loadTrack(chapter: number, mood: Mood): Promise<{ buf: AudioBuffer; info: TrackInfo; delay: number } | null> {
+    const key = `${chapter}:${mood}`;
+    let p = this.tracks.get(key);
+    if (!p) {
+      const base = (import.meta.env?.BASE_URL ?? '/') + 'music/';
+      this.manifest ??= fetch(base + 'manifest.json').then((r) => (r.ok ? (r.json() as Promise<MusicManifest>) : null)).catch(() => null);
+      p = this.manifest.then(async (m) => {
+        const info = m?.[key] as TrackInfo | undefined; if (!m || !info || !this.ctx) return null;
+        const res = await fetch(base + info.file); if (!res.ok) return null;
+        const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
+        return { buf, info, delay: m.encoderDelay };
+      }).catch(() => null);
+      this.tracks.set(key, p);
+    }
+    return p;
+  }
+  /** loop the body of the track gaplessly (the file carries a pre-roll and the encoder's delay, which the loop points skip) */
+  private startSampled(t: { buf: AudioBuffer; info: TrackInfo; delay: number }): boolean {
+    const c = this.ctx; if (!c) return false;
+    const rate = t.buf.sampleRate, start = (t.info.preroll + t.delay) / rate, end = start + t.info.length / rate;
+    if (!(end <= t.buf.duration + 0.05)) return false;           // the decoder gave something unexpected: use the synth
+    const src = c.createBufferSource(); src.buffer = t.buf; src.loop = true; src.loopStart = start; src.loopEnd = Math.min(end, t.buf.duration);
+    const g = c.createGain(); g.gain.value = 0; g.gain.setTargetAtTime(1, c.currentTime, 0.2);
+    src.connect(g); g.connect(this.musicBus); src.start(0, start);
+    this.sampled = { src, g };
+    return true;
   }
 
   private startDrone(): void {

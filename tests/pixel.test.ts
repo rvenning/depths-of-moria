@@ -67,3 +67,19 @@ describe('the creature sprites', () => {
     }
   });
 });
+
+import { HERO_ANIMS, HERO_ATTACKS, heroPoseImage } from '../src/art/pixel/heroSprites.ts';
+describe('hero attack animations', () => {
+  const diff = (a: Uint8ClampedArray | number[], b: Uint8ClampedArray | number[]): number => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) n++; return n; };
+  for (const h of HERO_LIST) {
+    it(`${h.id} has two distinct melee attacks and two distinct casts`, () => {
+      for (const [a, b] of HERO_ATTACKS) {
+        // the final frames (the moment of impact or release) of the two variants must be visibly different, and each differs from standing
+        const fa = heroPoseImage(h.id, a, HERO_ANIMS[a].length - 1).rgba, fb = heroPoseImage(h.id, b, HERO_ANIMS[b].length - 1).rgba, idle = heroImage(h.id).rgba;
+        expect(diff(fa, fb), `${a} vs ${b}`).toBeGreaterThan(40);
+        expect(diff(fa, idle), a).toBeGreaterThan(30);
+        expect(diff(fb, idle), b).toBeGreaterThan(30);
+      }
+    });
+  }
+});

@@ -23,7 +23,8 @@ type Pt = [number, number];
  */
 export interface Pose { stride?: number; up?: number; lean?: number; hand?: Pt; tip?: Pt; rhand?: Pt; head?: Pt; cape?: number; blink?: boolean; open?: boolean }
 
-export type HeroAnim = 'idle' | 'walk' | 'wind' | 'dash' | 'strike' | 'hurt' | 'cast' | 'win';
+/** `strike` is the downward chop and `thrust` the level lunge; `cast` raises the hands and `cast2` sweeps them forward (each hero's second attack animation) */
+export type HeroAnim = 'idle' | 'walk' | 'wind' | 'dash' | 'strike' | 'thrust' | 'hurt' | 'cast' | 'cast2' | 'win';
 /** the frames of each animation; the battle scene plays `idle` in a loop and the others on events */
 export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
   idle: [{}, { up: -1, cape: 1, hand: [0, -1], rhand: [0, -1] }, { up: -1, cape: 2, hand: [0, -1], rhand: [0, -1], head: [0, 1] }, { cape: 1, head: [0, 0], blink: true }],
@@ -31,8 +32,10 @@ export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
   wind: [{ lean: -3, up: 1, hand: [-5, -7], tip: [-14, 10], rhand: [2, -2], head: [-1, 0], cape: 2 }],
   dash: [{ lean: 4, up: 1, hand: [3, 3], tip: [6, 14], rhand: [-3, 1], head: [2, 1], cape: -4 }, { lean: 5, up: 0, hand: [4, 2], tip: [8, 12], rhand: [-4, 0], head: [3, 0], cape: -5 }],
   strike: [{ lean: 5, up: 1, hand: [7, 3], tip: [14, 26], rhand: [-3, 0], head: [2, 1], cape: -3 }, { lean: 3, up: 1, hand: [5, 5], tip: [10, 30], rhand: [-2, 1], head: [1, 1], cape: -1 }],
+  thrust: [{ lean: -4, up: 0, hand: [-6, 2], tip: [-14, 0], rhand: [3, -1], head: [-1, 0], cape: 2 }, { lean: 6, up: 1, hand: [10, -1], tip: [24, -3], rhand: [-4, 0], head: [3, 0], cape: -5 }, { lean: 5, up: 1, hand: [9, 0], tip: [20, -2], rhand: [-3, 1], head: [2, 1], cape: -3 }],
   hurt: [{ lean: -4, up: 1, hand: [-3, 3], tip: [-8, 10], rhand: [-2, 3], head: [-2, 1], cape: 3, blink: true }],
   cast: [{ lean: -1, up: 0, hand: [1, -7], tip: [3, -6], rhand: [2, -9], cape: 1 }, { lean: 1, up: -1, hand: [2, -10], tip: [4, -8], rhand: [3, -12], cape: 2 }],
+  cast2: [{ lean: -2, up: 0, hand: [-4, -2], tip: [-6, -4], rhand: [-5, -3], cape: 2 }, { lean: 2, up: -1, hand: [6, -4], tip: [9, -8], rhand: [8, -6], cape: -2 }, { lean: 3, up: 0, hand: [8, -2], tip: [12, -3], rhand: [9, -3], cape: -3 }],
   win: [{ up: -2, hand: [2, -13], tip: [-1, -12], rhand: [1, -13], head: [0, -1], cape: 2 }, { up: 0, hand: [2, -11], tip: [-1, -10], rhand: [1, -11], cape: 0 }],
 };
 
@@ -274,6 +277,8 @@ function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
     if (anim === 'dash') return { ...base, hand: [1, 0], tip: [0, 0], rhand: [-2, 0] };
     if (anim === 'wind' || anim === 'cast') return { ...base, hand: [1, -1], tip: [0, 0], rhand: [anim === 'wind' ? -6 : -4 - n * 2, 0], lean: base.lean };
     if (anim === 'strike') return { ...base, hand: [2, 0], rhand: [3, 0], tip: [0, 0] };
+    if (anim === 'thrust') return { ...base, hand: [2, -1], rhand: n === 0 ? [-8, -1] : n === 1 ? [3, 0] : [2, 0], tip: [0, 0], lean: n === 0 ? -5 : base.lean };            // draw and loose
+    if (anim === 'cast2') return { ...base, hand: [2, -6], rhand: n === 0 ? [-6, -5] : [2, -6], tip: [0, 0], lean: n === 0 ? -4 : -1 };    // a high volley, leaning back
     return { ...base, tip: [0, 0], hand: base.hand ?? [0, 0], rhand: anim === 'win' ? [2, -10] : base.rhand };
   }
   if (id === 'gandalf') {
@@ -281,8 +286,11 @@ function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
     if (anim === 'wind') return { ...base, hand: [-1, -4], tip: [-1, -6], open: false };
     if (anim === 'strike' || anim === 'cast') return { ...base, hand: [3, -7 - n * 2], tip: [3, -6 - n * 2], open: true, rhand: [2, -8] };
     if (anim === 'win') return { ...base, hand: [2, -10], tip: [1, -9], open: true };
+    if (anim === 'thrust') return { ...base, hand: [n === 0 ? -3 : 8, -2], tip: [n === 0 ? -4 : 6, -3], open: n > 0, rhand: [n === 0 ? 1 : 6, -2] };    // the staff thrust forward
+    if (anim === 'cast2') return { ...base, hand: [n === 0 ? -2 : 7, -5], tip: [n === 0 ? -2 : 6, -6], open: true, rhand: [n === 0 ? -3 : 8, -4] };      // a sweeping gesture
     return { ...base, tip: [0, 0], hand: base.hand };
   }
+  if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'thrust') return { ...base, tip: id === 'gimli' ? [base.tip?.[0] ?? 0, 6] : [base.tip?.[0] ?? 0, base.tip?.[1] ?? 0] };
   if (id === 'frodo' && anim === 'cast') return { ...base, hand: [2, -6], tip: [4, -10] };
   if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? (n ? [8, 28] : [10, 24]) : (n ? [8, 18] : [12, 14]) };
   return base;
@@ -301,3 +309,7 @@ export function paintHeroNormal(id: HeroId): HTMLCanvasElement { return built(id
 /** one frame of an animation: colour + normal map */
 export function heroFrame(id: HeroId, anim: HeroAnim, n: number): { color: HTMLCanvasElement; normal: HTMLCanvasElement } { return built(id, anim, n % HERO_ANIMS[anim].length); }
 export function heroImage(id: HeroId): PixImg { return BUILD[id](poseFor(id, 'idle', 0)); }
+/** the raw pixels of one frame of an animation (no canvas needed: used by the tests) */
+export function heroPoseImage(id: HeroId, anim: HeroAnim, n: number): PixImg { return BUILD[id](poseFor(id, anim, n % HERO_ANIMS[anim].length)); }
+/** the attack animations a hero can play: a melee pair and a ranged/spell pair */
+export const HERO_ATTACKS: HeroAnim[][] = [['strike', 'thrust'], ['cast', 'cast2']];

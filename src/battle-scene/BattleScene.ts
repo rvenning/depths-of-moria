@@ -46,6 +46,7 @@ interface Node {
   idle?: Phaser.Tweens.Tween;
   /** sprite animation: the current clip, when a one-shot clip ends, a per-unit phase so a party does not breathe in unison, the texture on show */
   anim: HeroAnim;
+  swings: number; casts: number;
   hold: number;
   phase: number;
   texKey: string;
@@ -256,7 +257,7 @@ export class BattleScene extends Phaser.Scene {
       this.lights.disable();
       cam.filters.internal.list.forEach((x) => x.setActive(false)); cam.filters.external.list.forEach((x) => x.setActive(false));
     }
-    for (const l of this.layers) l.setLighting(want);
+    for (const l of this.layers) l.setLighting(want && !this.bakedBg);
     for (const n of this.nodes.values()) n.sprite.setLighting(want);
   }
 
@@ -269,8 +270,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private bgKeys: string[] = [];
+  private bakedBg = false;
 
   private buildBackground(bg: BgLayers): void {
+    this.bakedBg = !!bg.baked;
     for (const l of this.layers) l.destroy();
     const keep = new Set(['far', 'mid', 'floor', 'near'].map((n) => `bg:${bg.theme}:${bg.variant}:${n}`));
     for (const k of this.bgKeys) if (!keep.has(k) && this.textures.exists(k)) this.textures.remove(k);
@@ -290,7 +293,7 @@ export class BattleScene extends Phaser.Scene {
       // the layer is BG_PAD native pixels larger on every side, so showing it at exactly ZOOM keeps every pixel square
       const img = this.add.image(STAGE_W / 2, STAGE_H / 2, key).setScale(ZOOM).setDepth(depth);
       if (name !== 'near' && !this.textures.get(key).dataSource.length) this.textures.get(key).setDataSource(normalMapOf(cv, 1.8));
-      if (name !== 'near') img.setLighting(this.hd);
+      if (name !== 'near') img.setLighting(this.hd && !bg.baked);
       this.layers.push(img);
       return img;
     };
@@ -301,12 +304,13 @@ export class BattleScene extends Phaser.Scene {
       const R = Math.max(8, Math.round(l.r / ZOOM / 8) * 8);
       const x = Math.round(l.x / ZOOM) * ZOOM, y = Math.round(l.y / ZOOM) * ZOOM;
       const img = this.add.image(x, y, this.glowTexture(R)).setScale(ZOOM).setBlendMode(Phaser.BlendModes.ADD).setDepth(-10).setTint(Phaser.Display.Color.HexStringToColor(this.hexOf(l.color)).color);
-      img.setAlpha(0.4);
-      this.bgLights.push({ img, base: 0.4, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
+      img.setAlpha(bg.baked ? 0.14 : 0.4);
+      this.bgLights.push({ img, base: bg.baked ? 0.14 : 0.4, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
       this.deco.push(loopVfx(this, 'torch', x, y + 8, { scale: 1, depth: -9, phase: Math.floor(Math.random() * 4) }));
       const col = Phaser.Display.Color.HexStringToColor(this.hexOf(l.color));
-      const light = this.lights.addLight(x, y, l.r * 2.7, col.color, 1.8, l.r * 2.7 * 0.6);
-      this.lightObjs.push({ light, base: 1.8, speed: 0.004 + Math.random() * 0.004, flick: l.flicker, phase: Math.random() * 100 });
+      const li = bg.baked ? 0.7 : 1.8, lr = l.r * (bg.baked ? 2.2 : 2.7);   // a rendered room is already lit; its torches only have to light the sprites
+      const light = this.lights.addLight(x, y, lr, col.color, li, lr * 0.6);
+      this.lightObjs.push({ light, base: li, speed: 0.004 + Math.random() * 0.004, flick: l.flicker, phase: Math.random() * 100 });
     }
     // slanted light shafts falling through the room (a theme-coloured haze), drifting a little
     if (this.hd && !this.reduced) {
@@ -348,11 +352,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** an enemy's frames: as painted, breathing in, winding up, lunging (they face left, so forward is -x) and flinching */
-  private enemyTex(id: string, v: 'idle0' | 'idle1' | 'wind' | 'strike' | 'hurt'): string {
+  private enemyTex(id: string, v: 'idle0' | 'idle1' | 'wind' | 'strike' | 'hurt' | 'step0' | 'step1'): string {
     const key = v === 'idle0' ? `e:${id}` : `e:${id}:${v}`;
     if (!this.textures.exists(key)) {
       const def = ENEMIES[id], base = paintCreature(def);
-      const cv = v === 'idle0' ? base : v === 'idle1' ? breathe(base) : v === 'wind' ? leanTop(base, 3, -1) : v === 'strike' ? leanTop(base, -5, 1) : leanTop(base, 4, 0);
+      const cv = v === 'idle0' ? base : v === 'idle1' ? breathe(base) : v === 'wind' ? leanTop(base, 3, -1) : v === 'strike' ? leanTop(base, -5, 1) : v === 'step0' ? leanTop(base, -2, -1) : v === 'step1' ? breathe(leanTop(base, -3, 0)) : leanTop(base, 4, 0);
       const t = this.textures.addCanvas(key, cv); t?.setDataSource(v === 'idle0' ? paintCreatureNormal(def) : normalMapOf(cv, 1.4));
     }
     return key;
@@ -366,7 +370,7 @@ export class BattleScene extends Phaser.Scene {
   /** play a clip once for `ms` (an enemy has wind-up, strike and hurt frames; its cast is a wind-up) */
   private setAnim(n: Node, anim: HeroAnim, ms: number): void {
     if (!n.alive) return;
-    if (n.side === 'enemy') { if (anim === 'win' || anim === 'idle') return; if (anim === 'cast' || anim === 'dash') anim = 'wind'; }
+    if (n.side === 'enemy') { if (anim === 'win' || anim === 'idle') return; if (anim === 'cast' || anim === 'cast2') anim = 'wind'; else if (anim === 'thrust') anim = 'strike'; }
     n.anim = anim; n.hold = this.time.now + ms / this.speed;
   }
 
@@ -375,12 +379,12 @@ export class BattleScene extends Phaser.Scene {
     if (n.side === 'hero' && n.view.heroId) {
       if (n.anim !== 'idle' && n.anim !== 'win' && now > n.hold) n.anim = 'idle';
       const len = HERO_ANIMS[n.anim].length;
-      const per = n.anim === 'idle' ? 260 : n.anim === 'win' ? 300 : n.anim === 'strike' ? 150 : 90;
+      const per = n.anim === 'idle' ? 260 : n.anim === 'win' ? 300 : n.anim === 'strike' ? 150 : n.anim === 'thrust' ? 110 : 90;
       const i = this.reduced && n.anim === 'idle' ? 0 : Math.floor((now + n.phase) / per) % len;
       key = this.heroTex(n.view.heroId, n.anim, i);
     } else {
       if (n.anim !== 'idle' && now > n.hold) n.anim = 'idle';
-      const pose = n.anim === 'wind' || n.anim === 'strike' || n.anim === 'hurt' ? n.anim : null;
+      const pose = n.anim === 'wind' || n.anim === 'strike' || n.anim === 'hurt' ? n.anim : n.anim === 'dash' ? (Math.floor(now / 85) % 2 ? 'step1' : 'step0') : null;   // a dash is a two-frame walk
       key = this.enemyTex(n.view.id, pose ?? (this.reduced ? 'idle0' : [0, 1, 1, 0][Math.floor((now + n.phase) / 340) % 4] ? 'idle1' : 'idle0'));
     }
     if (key !== n.texKey) { n.sprite.setTexture(key); n.texKey = key; }
@@ -410,7 +414,7 @@ export class BattleScene extends Phaser.Scene {
     const node: Node = {
       uid: u.uid, view: u, c, sprite, shadow, ring, bar, hpText, name, icons, statuses: new Map(), baseX: pos.x, baseY: pos.y, baseScale: scale,
       hp: u.hp, maxHp: u.maxHp, shownHp: u.hp, side: u.side, alive: true, facing,
-      anim: 'idle', hold: 0, phase: Math.random() * 2000, texKey: '',
+      anim: 'idle', swings: 0, casts: 0, hold: 0, phase: Math.random() * 2000, texKey: '',
     };
     this.nodes.set(u.uid, node);
     this.drawBar(node, w);
@@ -747,14 +751,15 @@ export class BattleScene extends Phaser.Scene {
       const ox = a.c.x; const oy = a.c.y;
       this.setAnim(a, 'dash', 190);
       await this.tween({ targets: a.c, x: tx, y: ty, duration: 170, ease: 'quad.in' });
-      this.setAnim(a, 'strike', 340);
+      // heroes alternate between two attacks: the downward chop and the level thrust
+      this.setAnim(a, a.side === 'hero' && a.swings++ % 2 ? 'thrust' : 'strike', 340);
       return async () => { await this.tween({ targets: a.c, x: ox, y: oy, duration: 170, ease: 'quad.out' }); };
     }
     // cast / shoot pose: a small hop and glow
     const col = this.fxColor(fx);
     this.puff(a.c.x, this.pos(a).y, col, 6);
     this.flashLight(a.c.x, this.pos(a).y, col, 200, 1.4, 380);
-    this.setAnim(a, 'cast', 520);
+    this.setAnim(a, a.side === 'hero' && a.casts++ % 2 ? 'cast2' : 'cast', 520);
     this.vfx('aura', a, { tint: col, feet: true, dy: -3, scale: 0.7 });
     await this.tween({ targets: a.sprite, y: -10, duration: 90, yoyo: true, ease: 'quad.out' });
     return null;

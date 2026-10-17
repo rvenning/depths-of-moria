@@ -1,6 +1,6 @@
 # Asset manifest
 
-There are **no external image, audio or model files**. Everything the player sees and hears is generated at runtime from code.
+There are no hand-made or downloaded image, audio or model files. Art and effects are generated at runtime from code. Two generated asset sets are rendered *offline* by tools in this repo and shipped as files: the **orchestral music** (`public/music`, below) and the **modelled chapter-1 backdrops** (`public/backdrops`, below).
 
 ## Generated art (src/art)
 | Module | Produces |
@@ -19,6 +19,12 @@ Everything is drawn at a native pixel size and shown at an integer zoom (one art
 - `vfx.ts` / `pixel/fxFrames.ts`: 13 procedurally drawn pixel effect clips (flame, burst, slash arc, heal, ice, lightning, aura, shield, smoke, shadow, poison, rays, impact), mapped to each skill's effect type.
 - Cinematics: letterboxed boss introduction with a push-in, crit hit-stop and screen punch, turn marker, victory confetti.
 - A Graphics setting (Auto / HD-2D / Plain pixels); Auto falls back to plain pixels when the frame rate is poor.
+
+## Sampled orchestral score (public/music, tools/music)
+- 40 tracks: every chapter (1–10) × title, camp, battle, boss. The pieces are the runtime composer's (`score.ts`), orchestrated for strings, cello, harp, flute/oboe, brass, choir, timpani and drums (`tools/music/render-music.ts`), rendered through the **MuseScore_General (Lite)** soundfont with `spessasynth_core`, given a Freeverb room, normalised to **−17 LUFS** (ITU-R BS.1770, all 40 within ±0.1), soft-limited and encoded to 96 kbps MP3 (19 MB in all; each track is fetched when first needed and cached by the service worker).
+- Each file carries a 4608-sample pre-roll and the encoder delay (`manifest.json`), so the player loops the body gaplessly with `loopStart`/`loopEnd`; the loop's last 93 ms is spliced to the audio that precedes its first sample, so there is no click at the wrap. `node tools/music/verify.cjs` decodes every file in Chrome and checks duration, dropouts, spectrum, the click at the seam and the level step across it.
+- Licence: MIT (parts CC0/PD) — recorded in `docs/RIGHTS.md` and shipped as `public/music/LICENSES.txt`.
+- The synth below is the fallback (missing track, decode failure, or *Orchestral score* switched off in Settings).
 
 ## Generated audio (src/audio/audio.ts, src/audio/score.ts)
 - A composed score per chapter and mood: `score.ts` writes an 8-bar piece (chord progression stacked from the chapter's mode, a two-phrase melody that answers itself and closes on the tonic, a harp figure, a bass line); `audio.ts` performs it with string pad, harp, flute-like lead, bass, taiko, snare, and (for bosses) brass stabs and a choir pad, over the drone and ambience beds
@@ -39,3 +45,8 @@ Everything is drawn at a native pixel size and shown at an integer zoom (one art
 
 ## Content volumes (verified by tests/content.test.ts)
 10 chapters · 10 bosses · 20 mini/elite variants (+ 10 elites) · 40 normal enemies · 7 heroes (3 skills, 1 passive, 10 talents each) · 130 items in 10 sets + 10 boss legendaries · 15 affixes · 6 relics · 21 hero-pair bonds (63 scenes, 21 combos) · 24 events · 33 quests · 30 achievements · 46 lore entries · 15 room variants.
+
+## Modelled backdrops (public/backdrops, tools/backdrop)
+- Chapter 1's `hall` room and its boss `arena` are modelled and lit in Blender 4.5 (`tools/backdrop/hall.py`: procedural stone, torches, moonlight, depth haze) and rendered with Cycles as four separable layers (far / mid / floor / near; each layer is rendered with the others as holdouts, so shadows and bounce light are baked in). `tools/backdrop/pack.py` packs them as lossy WebP (about 70 KB per room) with the torch positions projected to screen space.
+- At runtime they go through the same pixelise + dither + depth-of-field pipeline as the painted layers (more tones), and the scene treats them as pre-lit: the backdrop is not re-lit, the torches only light the sprites. Other rooms and chapters still use the painted backdrops.
+- Rebuild: `tools/backdrop/run.sh tools/backdrop/hall.py .scratch/out 160 960 hall|arena`, then `python -I tools/backdrop/pack.py .scratch/out 1 hall|arena`.
