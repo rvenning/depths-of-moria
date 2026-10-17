@@ -9,7 +9,7 @@ A polished, single-player fantasy auto-battler in the long-form spirit of Soda D
 ```bash
 npm install
 npm run dev          # http://localhost:8140
-npm test             # 150+ unit / integration tests (engine, content, progression, saves)
+npm test             # 190+ unit / integration tests (engine, content, progression, saves)
 npm run typecheck
 npm run build        # tsc + vite build → dist/ (with service worker)
 npm run preview      # http://localhost:8141
