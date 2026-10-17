@@ -14,7 +14,7 @@ import { SLOTS, computeHero, itemScore } from './stats.ts';
 export const defaultSettings = (): Settings => ({
   master: 0.8, music: 0.5, sfx: 0.7, ambience: 0.5,
   reducedMotion: typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)').matches : false,
-  highContrast: false, graphics: 'auto', textScale: 1, speed: 2, showLog: true, naming: 'fan',
+  highContrast: false, graphics: 'auto', voice: false, textScale: 1, speed: 2, showLog: true, naming: 'fan',
   autoSalvageUpTo: null, lootFilter: 'common', autoDelve: false, confirmReset: true, skipStories: false,
 });
 

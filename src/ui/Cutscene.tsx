@@ -4,6 +4,7 @@ import { animateCast } from '../art/castScene.ts';
 import { HEROES } from '../content/heroes.ts';
 import type { HeroId } from '../content/schema.ts';
 import { sfx } from '../audio/audio.ts';
+import { speak, stopSpeaking } from '../audio/voice.ts';
 import { t } from './names.ts';
 import { store } from './store.ts';
 
@@ -31,6 +32,7 @@ export function Cutscene({ title, chapter, cast, lines, onClose, doneLabel = 'Cl
     return () => window.clearInterval(id);
   }, [full, reduced]);
 
+  useEffect(() => { if (store.state.settings.voice) speak(line.who, full); return () => stopSpeaking(); }, [line, full]);
   const done = shown >= full.length;
   const advance = useCallback(() => {
     if (!done) { setShown(full.length); return; }

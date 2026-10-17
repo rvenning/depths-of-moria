@@ -28,6 +28,8 @@ export interface Settings {
   skipStories: boolean;
   /** battle graphics: 'hd' = HD-2D lights, bloom and depth of field; 'low' = flat pixel art; 'auto' = hd, dropping to low on a slow GPU */
   graphics: 'auto' | 'hd' | 'low';
+  /** speak cutscene dialogue aloud with the browser's own voices (each hero gets their own pitch) */
+  voice: boolean;
 }
 
 export interface ExpeditionBuff { stat: StatKey; pct: number; battles: number; label: string }
