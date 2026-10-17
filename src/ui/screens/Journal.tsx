@@ -10,7 +10,8 @@ import { RARITY_COLOR } from '../../content/schema.ts';
 import type { BondDef, ItemInstance } from '../../content/schema.ts';
 import { metricValue } from '../../core/meta.ts';
 import type { GameState } from '../../core/state.ts';
-import { Bar, EnemyPortrait, HeroPortrait, Icon, ItemCell, Modal, Tabs, Tip, fmt } from '../components.tsx';
+import { Bar, EnemyPortrait, HeroPortrait, Icon, ItemCell, Tabs, Tip, fmt } from '../components.tsx';
+import { Cutscene } from '../Cutscene.tsx';
 import { t } from '../names.ts';
 import { store, useGame } from '../store.ts';
 
@@ -177,17 +178,7 @@ function Bonds() {
           );
         })}
       </div>
-      {scene && (
-        <Modal label="Bond scene" onClose={() => setScene(null)}>
-          <div className="row"><HeroPortrait id={scene.b.a} size="md" /><HeroPortrait id={scene.b.b} size="md" /><h3>{t(scene.b.scenes[scene.i].title)}</h3></div>
-          <div className="scene-txt" style={{ margin: '0.6rem 0' }}>
-            {scene.b.scenes[scene.i].lines.map((l, i) => (
-              <p key={i}>{l.who !== 'narr' && <span className="line-who">{t(HEROES[l.who].name)}:</span>}{l.who === 'narr' ? <i className="dim">{t(l.text)}</i> : `“${t(l.text)}”`}</p>
-            ))}
-          </div>
-          <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => setScene(null)} autoFocus>Close</button></div>
-        </Modal>
-      )}
+      {scene && <Cutscene title={t(scene.b.scenes[scene.i].title)} chapter={s.age} cast={[scene.b.a, scene.b.b]} lines={scene.b.scenes[scene.i].lines} onClose={() => setScene(null)} />}
     </div>
   );
 }

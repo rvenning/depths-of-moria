@@ -18,6 +18,7 @@ import { t } from '../names.ts';
 import { store, useGame } from '../store.ts';
 import { sfx } from '../../audio/audio.ts';
 import { newBondScenes } from './Journal.tsx';
+import { Cutscene } from '../Cutscene.tsx';
 
 const HOT: { id: string; label: string; icon: string; screen: 'map' | 'roster' | 'armoury' | 'forge' | 'shrine' | 'journal' | 'quests' }[] = [
   { id: 'map', label: 'Descend', icon: 'map', screen: 'map' },
@@ -153,21 +154,9 @@ function Prologue() {
     { h: 'Growing stronger', p: 'Gear your heroes in the Armoury, spend gold on camp facilities, raise the Relics with essence you earn from elites and bosses, and learn talents as heroes level. Bonds between heroes unlock stories and combo skills.' },
     { h: 'The Ages', p: 'Each time a chapter boss falls you may descend into the next, harder Age. Gold and ordinary gear reset, but heroes, relics, lore and legendary items stay with you. You will always be shown what is kept before you confirm.' },
   ];
-  const p = pages[page];
-  return (
-    <Modal label="Prologue">
-      <h2>{p.h}</h2>
-      <p style={{ fontSize: '1.15rem' }}>{p.p}</p>
-      <div className="row spread">
-        <span className="dim small">{page + 1} / {pages.length}</span>
-        <div className="row">
-          {page < pages.length - 1 ? <button className="btn primary" onClick={() => setPage(page + 1)} autoFocus>Next</button>
-            : <button className="btn primary" onClick={() => store.mutate((s) => { s.flags.prologue = 1; }, 'now')} autoFocus>To the camp</button>}
-          <button className="btn ghost" onClick={() => store.mutate((s) => { s.flags.prologue = 1; }, 'now')}>Skip</button>
-        </div>
-      </div>
-    </Modal>
-  );
+  void page; void setPage;
+  const finish = () => store.mutate((s) => { s.flags.prologue = 1; }, 'now');
+  return <Cutscene title="Depths of Moria" chapter={1} cast={['aragorn', 'gimli', 'frodo', 'legolas', 'sam']} lines={pages.map((p) => ({ who: 'narr' as const, head: p.h, text: p.p }))} onClose={finish} doneLabel="To the camp" />;
 }
 
 function Facilities() {

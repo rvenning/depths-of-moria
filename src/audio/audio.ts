@@ -316,6 +316,8 @@ export const sfx = {
   resume: () => A.resume(),
   configure: (s: Settings) => A.configure(s),
   click: () => { if (!A.ctx) return; A.tone(520, 0.05, 'triangle', 0.08); },
+  /** the soft blip of text being typed in a cutscene */
+  tick: () => { if (!A.ctx) return; A.tone(880 + Math.random() * 140, 0.02, 'square', 0.022); },
   confirm: () => { A.tone(440, 0.08, 'triangle', 0.12); A.tone(660, 0.12, 'triangle', 0.12, undefined, 0.07); },
   error: () => { A.tone(180, 0.18, 'sawtooth', 0.12, 120); },
   coin: () => { A.tone(1200, 0.06, 'square', 0.06); A.tone(1800, 0.12, 'square', 0.06, undefined, 0.05); },

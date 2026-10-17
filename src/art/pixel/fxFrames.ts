@@ -1,6 +1,6 @@
 // Pixel-art effect frames: pure canvas drawing with no Phaser, so the camp and the gallery can use them too.
 type Ctx = CanvasRenderingContext2D;
-export type FxKind = 'flame' | 'burst' | 'slash' | 'heal' | 'ice' | 'bolt' | 'aura' | 'shield' | 'smoke' | 'shadow' | 'poison' | 'rays' | 'impact';
+export type FxKind = 'torch' | 'flame' | 'burst' | 'slash' | 'heal' | 'ice' | 'bolt' | 'aura' | 'shield' | 'smoke' | 'shadow' | 'poison' | 'rays' | 'impact';
 
 const hash = (a: number, b: number, c = 0): number => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = ((h ^ (h >>> 13)) * 1274126177) | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 export function mk(w: number, h: number, draw: (c: Ctx, f: number) => void, n: number): HTMLCanvasElement[] {
@@ -15,6 +15,20 @@ const px = (c: Ctx, x: number, y: number, col: string, a = 1, s = 1): void => { 
 
 // ---- the drawers (white unless the effect has its own colours; white ones are tinted when played)
 export const drawers: Record<FxKind, { w: number; h: number; n: number; fps: number; blend: 'add' | 'normal'; draw: (c: Ctx, f: number) => void }> = {
+  // a small torch flame, four flickering frames (looped at each light in a room)
+  torch: {
+    w: 9, h: 15, n: 4, fps: 9, blend: 'add',
+    draw: (c, f) => {
+      for (let y = 0; y < 15; y++) {
+        const t = y / 14, hw = 3.7 * Math.sin(Math.PI * Math.min(1, (1 - t) * 0.92 + 0.08) ** 0.75) + 0.4, wob = Math.sin(f * 1.7 + y * 0.8) * 0.9 * (1 - t);
+        for (let x = 0; x < 9; x++) {
+          const d = Math.abs(x - 4 - wob) / Math.max(0.4, hw);
+          if (d > 1 || (d > 0.7 && hash(x, y, f + 3) < 0.35)) continue;
+          px(c, x, y, d < 0.3 ? '#fff8d8' : d < 0.6 ? '#ffd860' : d < 0.85 ? '#ff9a2e' : '#d8481e');
+        }
+      }
+    },
+  },
   flame: {
     w: 26, h: 34, n: 6, fps: 14, blend: 'add',
     draw: (c, f) => {

@@ -19,6 +19,17 @@ export function registerVfx(scene: Phaser.Scene): void {
   }
 }
 
+/** play an effect clip in a loop at (x, y) until the returned handle is stopped */
+export function loopVfx(scene: Phaser.Scene, kind: FxKind, x: number, y: number, o: { scale?: number; depth?: number; tint?: number; phase?: number } = {}): { img: Phaser.GameObjects.Image; stop: () => void } {
+  const clip = clips.get(kind) as Clip;
+  const img = scene.add.image(x, y, clip.frames[0]).setScale((o.scale ?? 1) * 2).setDepth(o.depth ?? -9).setOrigin(0.5, 1);
+  if (clip.blend === 'add') img.setBlendMode(Phaser.BlendModes.ADD);
+  if (o.tint !== undefined) img.setTint(o.tint);
+  let i = o.phase ?? 0;
+  const ev = scene.time.addEvent({ delay: 1000 / clip.fps, loop: true, callback: () => { i = (i + 1) % clip.frames.length; if (img.scene) img.setTexture(clip.frames[i]); } });
+  return { img, stop: () => { ev.remove(false); img.destroy(); } };
+}
+
 export interface PlayFx { tint?: number; scale?: number; flipX?: boolean; angle?: number; depth?: number; speed?: number; anchorBottom?: boolean }
 /** play an effect once at (x, y); resolves when it has finished */
 export function playVfx(scene: Phaser.Scene, kind: FxKind, x: number, y: number, o: PlayFx = {}): Promise<void> {

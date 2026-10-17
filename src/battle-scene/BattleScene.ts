@@ -5,7 +5,7 @@ import { HERO_FOOT, HERO_H } from '../art/heroes.ts';
 import { HERO_ANIMS, heroFrame, type HeroAnim } from '../art/pixel/heroSprites.ts';
 import { breathe, leanTop, normalMapOf } from '../art/pixel/pixelize.ts';
 import type { HeroId } from '../content/schema.ts';
-import { playVfx, registerVfx, type FxKind } from './vfx.ts';
+import { loopVfx, playVfx, registerVfx, type FxKind } from './vfx.ts';
 import { ENEMIES } from '../content/enemies.ts';
 import { HEROES } from '../content/heroes.ts';
 import { STATUSES } from '../content/statuses.ts';
@@ -100,6 +100,8 @@ export class BattleScene extends Phaser.Scene {
   autoQuality = false;
   private slowFor = 0;
   private hdReady = false;
+  private deco: { stop: () => void }[] = [];
+  private shafts: Phaser.GameObjects.Image[] = [];
   private lightObjs: { light: Phaser.GameObjects.Light; base: number; speed: number; flick: number; phase: number }[] = [];
 
   constructor() { super('battle'); }
@@ -127,6 +129,8 @@ export class BattleScene extends Phaser.Scene {
     mk('spark', 9, 9, (c) => px(c, '#fff', ['....#....', '....#....', '...###...', '.#######.', '#########', '.#######.', '...###...', '....#....', '....#....']));
     mk('slash', 16, 16, (c) => px(c, '#fff', ['.............##.', '...........####.', '.........####...', '.......####.....', '......###.......', '.....###........', '....###.........', '....###.........', '....###.........', '....###.........', '.....###........', '......###.......', '.......####.....', '.........####...', '...........####.', '.............##.']));
     mk('arrow', 11, 7, (c) => { px(c, '#0b0714', ['ooooooooooo', 'o#########o', '.o#######o.', '..o#####o..', '...o###o...', '....o#o....', '.....o.....'].map((r) => r.replace(/[^o]/g, '.').replace(/o/g, '#'))); px(c, '#ffe08a', ['...........', '.#########.', '..#######..', '...#####...', '....###....', '.....#.....', '...........']); });
+    // a soft slanted shaft of light, as ordered-dither dots (tinted when shown)
+    mk('shaft', 40, 150, (c) => { const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; const img = c.createImageData(40, 150); for (let y = 0; y < 150; y++) for (let x = 0; x < 40; x++) { const cx = 8 + (y / 150) * 22, w = 5 + (y / 150) * 9, d = Math.abs(x - cx) / w; const a = d >= 1 ? 0 : (1 - d) * (1 - y / 170) * 0.9; if (a > (B[((y & 3) << 2) | (x & 3)] + 0.5) / 16) { const i = (y * 40 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = 255; } } c.putImageData(img, 0, 0); });
     mk('orb', 11, 11, (c) => { px(c, '#fff', ['...#####...', '..#######..', '.#########.', '###########', '###########', '###########', '###########', '###########', '.#########.', '..#######..', '...#####...']); c.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 6; i++) c.fillRect(2 + i, 8 - (i >> 1), 1, 1); });
     mk('streak', 24, 5, (c) => { px(c, '#fff', ['.......................#', '.....##################', '.....###################', '.....##################', '.......................#']); c.fillStyle = 'rgba(255,255,255,0.45)'; for (let x = 0; x < 5; x++) c.fillRect(x, 2, 1, 1); });
   }
@@ -274,6 +278,10 @@ export class BattleScene extends Phaser.Scene {
     for (const l of this.bgLights) l.img.destroy();
     for (const l of this.lightObjs) this.lights.removeLight(l.light);
     this.lightObjs = [];
+    for (const d of this.deco) d.stop();
+    this.deco = [];
+    for (const s of this.shafts) s.destroy();
+    this.shafts = [];
     for (const e of this.emitters) e.destroy();
     this.layers = []; this.bgLights = []; this.emitters = [];
     const add = (name: string, cv: HTMLCanvasElement, depth: number) => {
@@ -295,9 +303,15 @@ export class BattleScene extends Phaser.Scene {
       const img = this.add.image(x, y, this.glowTexture(R)).setScale(ZOOM).setBlendMode(Phaser.BlendModes.ADD).setDepth(-10).setTint(Phaser.Display.Color.HexStringToColor(this.hexOf(l.color)).color);
       img.setAlpha(0.4);
       this.bgLights.push({ img, base: 0.4, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
+      this.deco.push(loopVfx(this, 'torch', x, y + 8, { scale: 1, depth: -9, phase: Math.floor(Math.random() * 4) }));
       const col = Phaser.Display.Color.HexStringToColor(this.hexOf(l.color));
       const light = this.lights.addLight(x, y, l.r * 2.7, col.color, 1.8, l.r * 2.7 * 0.6);
       this.lightObjs.push({ light, base: 1.8, speed: 0.004 + Math.random() * 0.004, flick: l.flicker, phase: Math.random() * 100 });
+    }
+    // slanted light shafts falling through the room (a theme-coloured haze), drifting a little
+    if (this.hd && !this.reduced) {
+      const tint = bg.theme === 'flooded' ? 0x9ad8ff : bg.theme === 'flame' || bg.theme === 'bridge' || bg.theme === 'forge' ? 0xff9a60 : bg.theme === 'archives' ? 0xc8a8ff : 0xffe2a8;
+      [0.22, 0.5, 0.78].forEach((fx, i) => { const s = this.add.image(Math.round((STAGE_W * fx) / ZOOM) * ZOOM, 120, 'shaft').setScale(ZOOM * 1.4).setOrigin(0.5, 0).setDepth(-8).setAlpha(0.13).setTint(tint).setBlendMode(Phaser.BlendModes.ADD); this.shafts.push(s); void i; });
     }
     // ambient particles: single pixels drifting
     if (!this.reduced) {
@@ -778,6 +792,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const now = this.time.now;
     for (const n of this.nodes.values()) if (n.alive) this.stepAnim(n, now);
+    this.shafts.forEach((s, i) => s.setAlpha(this.reduced ? 0.13 : 0.1 + 0.05 * Math.sin(this.driftT / 1700 + i * 2.1)));
     for (const l of this.lightObjs) {
       const f = Math.sin(this.driftT * l.speed * l.flick * 3 + l.phase) * 0.18 + Math.sin(this.driftT * l.speed * 7.3 + l.phase) * 0.1;
       l.light.intensity = this.reduced ? l.base : Math.max(0.5, l.base + f);
