@@ -41,7 +41,7 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [~] Multi-hour feel (pacing of the later Ages, whether the grind is fun) is unvalidated by a human player.
 - [ ] No colour-blind palette option (high contrast, text size and reduced motion exist).
 - [ ] No store packaging. The game is a PWA; there is no Steam/app-store wrapper.
-- [ ] Not deployed. By design (see RIGHTS.md) this fan-concept build stays private; do not publish it, or put it on the games hub or newsletter, without an Original-reskin decision first.
+- [x] Deployed (at the owner's request) to GitHub Pages as an unlisted page: https://rvenning.github.io/depths-of-moria/ . By decision it is NOT on the games hub and NOT in the newsletter. It still uses the Tolkien names by default (see RIGHTS.md); the "Original" naming toggle is the clean-reskin path.
 - [ ] Optional polish: per-hero voice barks, localisation, more event art.
 
 ## Visual overhaul — "Pixel Delve" (2026-10-18)
