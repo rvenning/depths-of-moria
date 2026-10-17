@@ -1,0 +1,14 @@
+Age 1: atkK=5.613 cyclesToBoss=11 (target 12) boss×1.037 firstTryWin=37% bossAttempts=2 ok=true | normal 5.5r mini 12.6r elite 21.1r boss 47.0r
+Age 2: atkK=14.910 cyclesToBoss=12 (target 13) boss×0.462 firstTryWin=50% bossAttempts=1 ok=true | normal 2.8r mini 9.4r elite 22.2r boss 14.0r
+Age 3: atkK=11.656 cyclesToBoss=17 (target 16) boss×0.765 firstTryWin=36% bossAttempts=2 ok=true | normal 5.2r mini 7.4r elite 14.9r boss 22.7r
+Age 4: atkK=11.656 cyclesToBoss=16 (target 17) boss×0.977 firstTryWin=41% bossAttempts=1 ok=true | normal 4.2r mini 9.7r elite 16.0r boss 28.0r
+Age 5: atkK=24.672 cyclesToBoss=18 (target 18) boss×1.340 firstTryWin=46% bossAttempts=0 ok=true | normal 6.6r mini 13.8r elite 28.7r boss 28.0r
+Age 6: atkK=26.531 cyclesToBoss=18 (target 19) boss×0.252 firstTryWin=18% bossAttempts=5 ok=true | normal 5.1r mini 8.4r elite 19.5r boss 16.5r
+Age 7: atkK=46.984 cyclesToBoss=20 (target 21) boss×0.252 firstTryWin=41% bossAttempts=1 ok=true | normal 8.7r elite 21.7r mini 15.0r boss 19.0r
+Age 8: atkK=34.434 cyclesToBoss=22 (target 22) boss×0.871 firstTryWin=34% bossAttempts=4 ok=true | normal 4.1r mini 9.8r elite 21.7r boss 32.5r
+Age 9: atkK=18.861 cyclesToBoss=22 (target 22) boss×0.261 firstTryWin=42% bossAttempts=7 ok=true | normal 7.5r elite 27.7r mini 12.4r boss 20.7r
+Age 10: atkK=22.813 cyclesToBoss=19 (target 23) boss×0.252 firstTryWin=31% bossAttempts=6 ok=true | normal 12.2r mini 21.9r elite 27.5r boss 38.0r
+ageHp:  [2.6,2.6,2.6,2.6,2.6,2.6,2.6,2.6,2.6,2.6]
+ageAtk: [5.613,14.91,11.656,11.656,24.672,26.531,46.984,34.434,18.861,22.813]
+ageBoss: [1.037,0.462,0.765,0.977,1.34,0.252,0.252,0.871,0.261,0.252]
+cycles to boss total 175 boss attempts 29

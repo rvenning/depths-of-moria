@@ -1,0 +1,7 @@
+Age 1: K=3.086 cycles=11 ok=true battles=167 h@1x=1.79
+Age 2: K=5.856 cycles=24 ok=true battles=315 h@1x=4.20
+Age 3: K=5.456 cycles=28 ok=true battles=313 h@1x=5.69
+Age 4: K=3.455 cycles=62 ok=false battles=161 h@1x=7.22
+ageHp: [3.086,5.856,5.456,3.455]
+ageAtk: [3.086,5.856,5.456,3.455]
+total h@1x 18.9 cycles 125

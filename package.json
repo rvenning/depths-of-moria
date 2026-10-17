@@ -1,0 +1,35 @@
+{
+  "name": "depths-of-moria",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Fellowship: Depths of Moria — a long-form fantasy auto-battler (private fan-game concept).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 8141 --strictPort",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "sim": "node tools/sim.ts",
+    "icons": "node tools/make-icons.ts",
+    "e2e": "node tests/e2e/e2e.cjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/cormorant-garamond": "^5.3.0",
+    "@fontsource-variable/eb-garamond": "^5.3.0",
+    "phaser": "^4.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.49.0",
+    "sharp": "^0.34.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}
