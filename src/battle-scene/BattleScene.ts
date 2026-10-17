@@ -366,7 +366,7 @@ export class BattleScene extends Phaser.Scene {
   /** play a clip once for `ms` (an enemy has wind-up, strike and hurt frames; its cast is a wind-up) */
   private setAnim(n: Node, anim: HeroAnim, ms: number): void {
     if (!n.alive) return;
-    if (n.side === 'enemy') { if (anim === 'win' || anim === 'idle') return; if (anim === 'cast') anim = 'wind'; }
+    if (n.side === 'enemy') { if (anim === 'win' || anim === 'idle') return; if (anim === 'cast' || anim === 'dash') anim = 'wind'; }
     n.anim = anim; n.hold = this.time.now + ms / this.speed;
   }
 
@@ -375,7 +375,7 @@ export class BattleScene extends Phaser.Scene {
     if (n.side === 'hero' && n.view.heroId) {
       if (n.anim !== 'idle' && n.anim !== 'win' && now > n.hold) n.anim = 'idle';
       const len = HERO_ANIMS[n.anim].length;
-      const per = n.anim === 'idle' ? 260 : n.anim === 'win' ? 300 : 110;
+      const per = n.anim === 'idle' ? 260 : n.anim === 'win' ? 300 : n.anim === 'strike' ? 150 : 90;
       const i = this.reduced && n.anim === 'idle' ? 0 : Math.floor((now + n.phase) / per) % len;
       key = this.heroTex(n.view.heroId, n.anim, i);
     } else {
@@ -745,7 +745,7 @@ export class BattleScene extends Phaser.Scene {
       const dir = a.side === 'hero' ? 1 : -1;
       const tx = t.c.x - dir * 54; const ty = t.c.y + 2;
       const ox = a.c.x; const oy = a.c.y;
-      this.setAnim(a, 'wind', 190);
+      this.setAnim(a, 'dash', 190);
       await this.tween({ targets: a.c, x: tx, y: ty, duration: 170, ease: 'quad.in' });
       this.setAnim(a, 'strike', 340);
       return async () => { await this.tween({ targets: a.c, x: ox, y: oy, duration: 170, ease: 'quad.out' }); };

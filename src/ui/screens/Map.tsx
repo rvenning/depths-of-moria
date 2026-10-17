@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { compositeBackground } from '../../art/backgrounds.ts';
+import { BAND_H, MAP_H, MAP_W, NODES, SKY_H, drawBanner, paintDescent } from '../../art/descentMap.ts';
 import { CHAPTERS } from '../../content/chapters.ts';
 import { ENEMIES } from '../../content/enemies.ts';
 import { HEROES } from '../../content/heroes.ts';
@@ -15,10 +15,45 @@ import { t } from '../names.ts';
 import { store, useGame } from '../store.ts';
 import { sfx } from '../../audio/audio.ts';
 
-function Thumb({ chapter }: { chapter: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => { const c = ref.current; if (!c) return; c.width = 288; c.height = 144; c.getContext('2d')?.drawImage(compositeBackground(chapter, 'hall', 288, 144), 0, 0); }, [chapter]);
-  return <canvas ref={ref} aria-hidden="true" />;
+/** the illustrated cutaway of the Deep: one clickable stratum per chapter, a winding path, a banner at the current Age */
+function DescentMap({ chapter, setChapter, reach, current, best }: { chapter: number; setChapter: (n: number) => void; reach: number; current: number; best: number }) {
+  const base = useRef<HTMLCanvasElement>(null), over = useRef<HTMLCanvasElement>(null), box = useRef<HTMLDivElement>(null);
+  const reduced = store.state.settings.reducedMotion;
+  useEffect(() => { const c = base.current; if (!c) return; c.width = MAP_W; c.height = MAP_H; (c.getContext('2d') as CanvasRenderingContext2D).drawImage(paintDescent(reach, current), 0, 0); }, [reach, current]);
+  useEffect(() => {
+    const c = over.current; if (!c) return;
+    c.width = MAP_W; c.height = MAP_H;
+    const x = c.getContext('2d') as CanvasRenderingContext2D; x.imageSmoothingEnabled = false;
+    const draw = (f: number): void => {
+      x.clearRect(0, 0, MAP_W, MAP_H);
+      const [cx, cy] = NODES[Math.min(10, Math.max(1, current)) - 1];
+      drawBanner(x, cx + 5, cy - 4, f);
+      const [sx, sy] = NODES[chapter - 1], r = 7 + (f % 4 < 2 ? 0 : 1);
+      x.fillStyle = '#ffe08a';
+      for (let k = 0; k < 24; k++) { const a = (k / 24) * Math.PI * 2; if (k % 2 === 0) x.fillRect(Math.round(sx + Math.cos(a) * r), Math.round(sy + Math.sin(a) * r), 1, 1); }
+    };
+    draw(0);
+    if (reduced) return;
+    let f = 0; const id = window.setInterval(() => draw(++f), 160);
+    return () => window.clearInterval(id);
+  }, [current, chapter, reduced]);
+  useEffect(() => { const el = box.current; if (!el) return; const [, y] = NODES[chapter - 1]; el.scrollTo({ top: Math.max(0, (y / MAP_H) * el.scrollHeight - el.clientHeight / 2), behavior: reduced ? 'auto' : 'smooth' }); }, [chapter]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="descent" ref={box}>
+      <div className="descent-in" style={{ aspectRatio: `${MAP_W} / ${MAP_H}` }}>
+        <canvas ref={base} aria-hidden="true" /><canvas ref={over} aria-hidden="true" />
+        {CHAPTERS.map((c, i) => {
+          const locked = c.n > reach, cleared = best >= c.n * 100;
+          return (
+            <button key={c.n} className={`dband ${chapter === c.n ? 'cur' : ''} ${locked ? 'lock' : ''}`} style={{ top: `${((SKY_H + i * BAND_H) / MAP_H) * 100}%`, height: `${(BAND_H / MAP_H) * 100}%` }} onClick={() => setChapter(c.n)} aria-pressed={chapter === c.n}>
+              <span className="dlabel"><span className="tiny dim">Chapter {c.n} · floors {c.floors[0]}–{c.floors[1]}</span><br /><b>{t(c.name)}</b>{' '}
+                {cleared ? <span className="good tiny">Cleared</span> : c.n === current ? <span className="gold tiny">Current Age</span> : locked ? <span className="faint tiny"><Icon k="lock" /> Locked</span> : <span className="dim tiny">Conquered</span>}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const TAG_ICON: Record<string, { icon: string; label: string }> = {
@@ -55,19 +90,7 @@ export function MapScreen() {
       <Tabs label="Mode" value={mode} onChange={setMode} tabs={[{ id: 'campaign', label: 'Campaign' }, { id: 'endless', label: 'Deep Delve' }, { id: 'ladder', label: 'Challenge Ladder' }]} />
       {mode === 'campaign' && (
         <div className="two" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.6fr)' }}>
-          <div className="col" style={{ gap: 6 }}>
-            {CHAPTERS.map((c) => {
-              const locked = c.n > Math.max(s.age, Math.ceil(Math.max(1, s.best) / 100));
-              const cleared = s.best >= c.n * 100;
-              return (
-                <button key={c.n} className={`chapcard ${chapter === c.n ? 'cur' : ''} ${locked ? 'lock' : ''}`} onClick={() => setChapter(c.n)} aria-pressed={chapter === c.n}>
-                  <Thumb chapter={c.n} />
-                  <div className="grow"><div className="tiny dim">Chapter {c.n} · floors {c.floors[0]}–{c.floors[1]}</div><b>{t(c.name)}</b>
-                    <div className="tiny">{cleared ? <span className="good">Cleared</span> : c.n === s.age ? <span className="gold">Current Age</span> : locked ? <span className="faint"><Icon k="lock" /> Locked</span> : <span className="dim">Conquered (reduced rewards)</span>}</div></div>
-                </button>
-              );
-            })}
-          </div>
+          <DescentMap chapter={chapter} setChapter={setChapter} reach={Math.max(s.age, Math.ceil(Math.max(1, s.best) / 100))} current={s.age} best={s.best} />
           <div className="col">
             <Section title={`${t(ch.name)}`} right={<span className="chip">{ch.n === s.age ? 'Current Age' : ch.n < s.age ? 'Earlier Age' : 'Locked'}</span>}>
               <p className="small dim">{t(ch.blurb)}</p>

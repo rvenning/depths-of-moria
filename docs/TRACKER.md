@@ -68,3 +68,6 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [x] JRPG-style cutscene presenter (`ui/Cutscene.tsx`, `art/castScene.ts`): the cast on a chapter backdrop, the speaker in the light, typed dialogue in a framed box, letterbox, skippable; used for the prologue and all 63 bond scenes.
 - [x] Animated torch flames at a room's light sources and drifting light shafts (theme-tinted).
 - Verified after the HD-2D pass: typecheck, 247 unit tests (including the composer, all 80 enemy sprites, all hero sprites), build, e2e 8/8, monkey (139 clicks, 0 errors), battle scene 51–57 fps with lights, bloom and filters on.
+- [x] Illustrated descent map on the Delve screen (replaces the chapter list): a cutaway of the mountain with the West-gate, ten strata each showing its own backdrop, a winding path, cleared/current/locked states, an animated banner and a selection halo (`art/descentMap.ts`).
+- [x] Richer attack animation: a forward-leaning dash into melee, a two-frame strike with follow-through; ensemble stereo placement in the music.
+- Still not matched, and not claimed: hand-drawn sprite sheets with many frames per character, 3D diorama environments, a recorded orchestral soundtrack, voiced dialogue, a walkable overworld, per-character campaigns.

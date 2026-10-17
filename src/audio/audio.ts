@@ -191,6 +191,12 @@ class AudioEngine {
     }
   }
 
+  /** route a voice to the music bus, placed left/right so the parts sit apart like an ensemble */
+  private to(g: AudioNode, pan: number): void {
+    const c = this.ctx as AudioContext;
+    if (typeof c.createStereoPanner === 'function') { const p = c.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p); p.connect(this.musicBus); } else g.connect(this.musicBus);
+  }
+
   // ---- instruments (all through the music bus)
   private env(g: GainNode, t: number, a: number, peak: number, hold: number, rel: number): void {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
@@ -204,7 +210,7 @@ class AudioEngine {
     for (const [type, det] of [['sawtooth', -8], ['sawtooth', 8], ['triangle', 0]] as [OscillatorType, number][]) {
       const o = c.createOscillator(); o.type = type; o.frequency.value = freq; o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur + 1.1);
     }
-    f.connect(g); g.connect(this.musicBus);
+    f.connect(g); this.to(g, Math.sin(freq * 0.37) * 0.7);
   }
   /** a sung "ah" for boss fights: a saw through two vowel-ish band-passes */
   private choir(freq: number, t: number, dur: number, vol: number): void {
@@ -213,14 +219,14 @@ class AudioEngine {
     const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq / 2;
     const lfo = c.createOscillator(); lfo.frequency.value = 5.2; const lg = c.createGain(); lg.gain.value = 6; lfo.connect(lg); lg.connect(o.detune);
     for (const [fr, q] of [[700, 6], [1150, 8]] as [number, number][]) { const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = fr; b.Q.value = q; o.connect(b); b.connect(g); }
-    o.start(t); lfo.start(t); o.stop(t + dur + 1); lfo.stop(t + dur + 1); g.connect(this.musicBus);
+    o.start(t); lfo.start(t); o.stop(t + dur + 1); lfo.stop(t + dur + 1); this.to(g, Math.sin(freq * 0.61) * 0.55);
   }
   private brass(freqs: number[], t: number, dur: number, vol: number): void {
     const c = this.ctx as AudioContext;
     const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(380, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.09); f.frequency.exponentialRampToValueAtTime(700, t + dur);
     const g = c.createGain(); this.env(g, t, 0.025, vol, dur * 0.4, dur * 0.8);
     for (const fr of freqs) for (const det of [-6, 6]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur * 1.4 + 0.1); }
-    f.connect(g); g.connect(this.musicBus);
+    f.connect(g); this.to(g, Math.sin(freqs[0] * 0.2) * 0.4);
   }
   private bassNote(freq: number, t: number, dur: number, vol: number): void {
     const c = this.ctx as AudioContext;
@@ -238,7 +244,7 @@ class AudioEngine {
     for (const [type, mul, v] of [['triangle', 1, 1], ['sine', 2, 0.35], ['sine', 3, 0.12]] as [OscillatorType, number, number][]) {
       const o = c.createOscillator(); o.type = type; o.frequency.value = freq * mul; const og = c.createGain(); og.gain.value = v; o.connect(og); og.connect(f); o.start(t); o.stop(t + dur + 1.2);
     }
-    f.connect(g); g.connect(this.musicBus);
+    f.connect(g); this.to(g, -0.35 + ((Math.log2(freq / 220) * 0.5) % 1) * 0.7);
   }
   /** a flute-like lead: breathy attack, gentle vibrato that blooms after a moment */
   private lead(freq: number, t: number, dur: number, vol: number): void {
@@ -251,8 +257,8 @@ class AudioEngine {
     vib.start(t); vib.stop(t + dur + 0.4);
     const n = c.createBufferSource(); n.buffer = this.noise(); const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = freq * 2.5; nf.Q.value = 2;
     const ng = c.createGain(); ng.gain.setValueAtTime(vol * 0.5, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
-    n.connect(nf); nf.connect(ng); ng.connect(this.musicBus); n.start(t, Math.random()); n.stop(t + 0.1);
-    g.connect(this.musicBus);
+    n.connect(nf); nf.connect(ng); this.to(ng, 0.2); n.start(t, Math.random()); n.stop(t + 0.1);
+    this.to(g, 0.2);
   }
   private snare(t: number, vol: number): void {
     const c = this.ctx as AudioContext;

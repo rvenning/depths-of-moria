@@ -23,12 +23,13 @@ type Pt = [number, number];
  */
 export interface Pose { up?: number; lean?: number; hand?: Pt; tip?: Pt; rhand?: Pt; head?: Pt; cape?: number; blink?: boolean; open?: boolean }
 
-export type HeroAnim = 'idle' | 'wind' | 'strike' | 'hurt' | 'cast' | 'win';
+export type HeroAnim = 'idle' | 'wind' | 'dash' | 'strike' | 'hurt' | 'cast' | 'win';
 /** the frames of each animation; the battle scene plays `idle` in a loop and the others on events */
 export const HERO_ANIMS: Record<HeroAnim, Pose[]> = {
   idle: [{}, { up: -1, cape: 1, hand: [0, -1], rhand: [0, -1] }, { up: -1, cape: 2, hand: [0, -1], rhand: [0, -1], head: [0, 1] }, { cape: 1, head: [0, 0], blink: true }],
   wind: [{ lean: -3, up: 1, hand: [-5, -7], tip: [-14, 10], rhand: [2, -2], head: [-1, 0], cape: 2 }],
-  strike: [{ lean: 5, up: 1, hand: [7, 3], tip: [14, 26], rhand: [-3, 0], head: [2, 1], cape: -3 }],
+  dash: [{ lean: 4, up: 1, hand: [3, 3], tip: [6, 14], rhand: [-3, 1], head: [2, 1], cape: -4 }, { lean: 5, up: 0, hand: [4, 2], tip: [8, 12], rhand: [-4, 0], head: [3, 0], cape: -5 }],
+  strike: [{ lean: 5, up: 1, hand: [7, 3], tip: [14, 26], rhand: [-3, 0], head: [2, 1], cape: -3 }, { lean: 3, up: 1, hand: [5, 5], tip: [10, 30], rhand: [-2, 1], head: [1, 1], cape: -1 }],
   hurt: [{ lean: -4, up: 1, hand: [-3, 3], tip: [-8, 10], rhand: [-2, 3], head: [-2, 1], cape: 3, blink: true }],
   cast: [{ lean: -1, up: 0, hand: [1, -7], tip: [3, -6], rhand: [2, -9], cape: 1 }, { lean: 1, up: -1, hand: [2, -10], tip: [4, -8], rhand: [3, -12], cape: 2 }],
   win: [{ up: -2, hand: [2, -13], tip: [-1, -12], rhand: [1, -13], head: [0, -1], cape: 2 }, { up: 0, hand: [2, -11], tip: [-1, -10], rhand: [1, -11], cape: 0 }],
@@ -252,18 +253,20 @@ export const HERO_FOOT = 90;
 function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
   const base = HERO_ANIMS[anim][n];
   if (id === 'legolas') {
+    if (anim === 'dash') return { ...base, hand: [1, 0], tip: [0, 0], rhand: [-2, 0] };
     if (anim === 'wind' || anim === 'cast') return { ...base, hand: [1, -1], tip: [0, 0], rhand: [anim === 'wind' ? -6 : -4 - n * 2, 0], lean: base.lean };
     if (anim === 'strike') return { ...base, hand: [2, 0], rhand: [3, 0], tip: [0, 0] };
     return { ...base, tip: [0, 0], hand: base.hand ?? [0, 0], rhand: anim === 'win' ? [2, -10] : base.rhand };
   }
   if (id === 'gandalf') {
+    if (anim === 'dash') return { ...base, hand: [0, -1], tip: [0, 0] };
     if (anim === 'wind') return { ...base, hand: [-1, -4], tip: [-1, -6], open: false };
     if (anim === 'strike' || anim === 'cast') return { ...base, hand: [3, -7 - n * 2], tip: [3, -6 - n * 2], open: true, rhand: [2, -8] };
     if (anim === 'win') return { ...base, hand: [2, -10], tip: [1, -9], open: true };
     return { ...base, tip: [0, 0], hand: base.hand };
   }
   if (id === 'frodo' && anim === 'cast') return { ...base, hand: [2, -6], tip: [4, -10] };
-  if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? [10, 24] : [12, 14] };
+  if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? (n ? [8, 28] : [10, 24]) : (n ? [8, 18] : [12, 14]) };
   return base;
 }
 
