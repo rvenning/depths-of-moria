@@ -15,7 +15,7 @@ core/         pure logic, no DOM: rng, stats, battle engine, floors, loot, econo
               progression, expedition, ages, game reducers, balance config
 persistence/  IndexedDB (localStorage fallback), versioned schema, migrations, export/import
 audio/        WebAudio synth: music director + SFX + volume buses
-art/          procedural painters (heroes, creatures, backgrounds, icons) + sprite cache
+art/          pixel engine (pixel/engine.ts, heroSprites.ts, pixelize.ts), vector painters for creatures/backgrounds/camp that are pixelised, icons, sprite cache
 ui/           React screens/components, battle canvas view, hooks
 tools/        balance simulation CLI, icon generator
 tests/        unit, integration, e2e
@@ -40,6 +40,6 @@ One serialisable `GameState`; every mutation is a pure function `(state, args) =
 See `src/content/schema.ts` (types) — every content table is `Record<Id, Def>` validated by `tests/content.test.ts` (referential integrity, counts vs. the spec's minimums, every skill has an effect and a tooltip).
 
 ## Asset plan
-No external assets. Art: procedural painters with a shared ink-outline + rim-light treatment; creature body-plan families × palettes. Audio: synthesised pads/plucks (original, generative per chapter) and SFX. Fonts: system serif stack (no downloads). Manifest of everything in `docs/ASSETS.md`.
+No external assets. Art: a pixel-art look ("Pixel Delve"): heroes are drawn natively with a small pixel engine (shape masks, inflate-shaded, hue-shifted ramps, ordered dither, outlines); creatures, rooms and the camp are painted procedurally and then pixelised; UI frames are notched 4px borders. Audio: synthesised pads/plucks (original, generative per chapter) and SFX. Font: Jersey 15, bundled. Manifest of everything in `docs/ASSETS.md`.
 
 ## Milestones → see TRACKER.md

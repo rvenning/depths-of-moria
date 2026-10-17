@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import Phaser from 'phaser';
 import { BattleScene, STAGE_H, STAGE_W, type SceneHooks, type SceneInit } from '../battle-scene/BattleScene.ts';
-import { iconImage } from '../art/icons.ts';
+import { pixelIconImage } from '../art/icons.ts';
 import { STATUSES } from '../content/statuses.ts';
 import type { BEvent } from '../core/battle/types.ts';
 
@@ -18,7 +18,7 @@ async function loadStatusIcons(): Promise<Record<string, HTMLImageElement>> {
   if (Object.keys(iconCache).length) return iconCache;
   await Promise.all(Object.values(STATUSES).map(async (s) => {
     const key = `ic:${s.glyph}:${s.kind}`;
-    if (!iconCache[key]) iconCache[key] = await iconImage(s.glyph, 40, s.kind === 'buff' ? '#9be8b0' : '#ff9a8a');
+    if (!iconCache[key]) iconCache[key] = await pixelIconImage(s.glyph, s.kind === 'buff' ? '#9be8b0' : '#ff9a8a');
   }));
   return iconCache;
 }
@@ -32,6 +32,7 @@ export const BattleStage = forwardRef<StageApi, { className?: string }>(function
 
   useEffect(() => {
     if (!host.current) return;
+    void document.fonts?.load("16px 'Jersey 15'");
     const s = new BattleScene();
     scene.current = s;
     s.hooks = hooks.current;
@@ -42,7 +43,7 @@ export const BattleStage = forwardRef<StageApi, { className?: string }>(function
       height: STAGE_H,
       backgroundColor: '#050507',
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      render: { antialias: true, pixelArt: false, roundPixels: false },
+      render: { antialias: false, pixelArt: true, roundPixels: true },
       audio: { noAudio: true },
       banner: false,
       disableContextMenu: true,

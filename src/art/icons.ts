@@ -149,3 +149,51 @@ export function iconImage(key: string, size = 48, color = '#ffffff'): Promise<HT
   }
   return p;
 }
+
+// ------------------------------------------------------------------ pixel icons
+/** icons are boiled down to ICON_PX x ICON_PX native pixels and shown at an integer zoom */
+export const ICON_PX = 16;
+const pixCanvases = new Map<string, HTMLCanvasElement>();
+const pixUrls = new Map<string, string>();
+let pixReady: Promise<void> | null = null;
+
+async function rasterise(key: string): Promise<HTMLCanvasElement> {
+  const svg = iconSvgString(key, 96, '#ffffff', 2.5);
+  const img = new Image();
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error(`icon ${key}`)); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; });
+  const cv = document.createElement('canvas'); cv.width = ICON_PX; cv.height = ICON_PX;
+  const c = cv.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(img, 1, 1, ICON_PX - 2, ICON_PX - 2);
+  const d = c.getImageData(0, 0, ICON_PX, ICON_PX);
+  for (let i = 0; i < d.data.length; i += 4) { const on = d.data[i + 3] >= 84; d.data[i] = d.data[i + 1] = d.data[i + 2] = 255; d.data[i + 3] = on ? 255 : 0; }
+  c.putImageData(d, 0, 0);
+  return cv;
+}
+
+/** rasterise every icon once (call before the first render; the UI falls back to the vector icon until then) */
+export function preloadPixelIcons(): Promise<void> {
+  pixReady ??= Promise.all(Object.keys(ICONS).map(async (k) => { try { pixCanvases.set(k, await rasterise(k)); } catch { /* keep the vector fallback */ } })).then(() => undefined);
+  return pixReady;
+}
+/** a white-on-transparent pixel icon as a data URL, for CSS masks (undefined until preloaded) */
+export function pixelIconUrl(key: string): string | undefined {
+  const k = iconKey(key);
+  const hit = pixUrls.get(k); if (hit) return hit;
+  const cv = pixCanvases.get(k); if (!cv) return undefined;
+  const u = cv.toDataURL('image/png'); pixUrls.set(k, u); return u;
+}
+/** a coloured pixel icon with a dark outline, as an image (for Phaser textures) */
+export async function pixelIconImage(key: string, color: string): Promise<HTMLImageElement> {
+  await preloadPixelIcons();
+  const src = pixCanvases.get(iconKey(key)) ?? await rasterise(iconKey(key));
+  const n = ICON_PX + 2, cv = document.createElement('canvas'); cv.width = n; cv.height = n;
+  const c = cv.getContext('2d') as CanvasRenderingContext2D;
+  const tint = (col: string): HTMLCanvasElement => { const t = document.createElement('canvas'); t.width = ICON_PX; t.height = ICON_PX; const x = t.getContext('2d') as CanvasRenderingContext2D; x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, ICON_PX, ICON_PX); return t; };
+  const dark = tint('#0b0714'), lit = tint(color);
+  for (const [dx, dy] of [[0, 1], [2, 1], [1, 0], [1, 2]]) c.drawImage(dark, dx, dy);
+  c.drawImage(lit, 1, 1);
+  const img = new Image();
+  await new Promise<void>((res) => { img.onload = () => res(); img.src = cv.toDataURL('image/png'); });
+  return img;
+}

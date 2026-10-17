@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ICONS, iconKey } from '../art/icons.ts';
+import { ICONS, ICON_PX, iconKey, pixelIconUrl } from '../art/icons.ts';
 import { paintHero } from '../art/heroes.ts';
 import { paintCreature } from '../art/creatures.ts';
 import { ENEMIES } from '../content/enemies.ts';
@@ -17,6 +17,13 @@ import { store } from './store.ts';
 // ------------------------------------------------------------------ icon
 export function Icon({ k, size, color, className, title }: { k: string; size?: number | string; color?: string; className?: string; title?: string }) {
   const key = iconKey(k);
+  const url = pixelIconUrl(key);
+  if (url) {
+    // pixel icons only look right at whole multiples of their native size
+    const px = typeof size === 'number' ? ICON_PX * Math.max(1, Math.round(size / ICON_PX)) : undefined;
+    const style = { '--m': `url(${url})`, ...(px ? { width: px, height: px } : null), ...(color ? { backgroundColor: color } : null) } as CSSProperties;
+    return <i className={`icon pix ${className ?? ''}`} style={style} role={title ? 'img' : 'presentation'} aria-label={title} aria-hidden={title ? undefined : true} />;
+  }
   return (
     <svg className={`icon ${className ?? ''}`} viewBox="0 0 24 24" width={size ?? '1.1em'} height={size ?? '1.1em'} fill="none"
       stroke={color ?? 'currentColor'} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" role={title ? 'img' : 'presentation'}
@@ -135,9 +142,10 @@ export function Bar({ value, max, kind, label, tall }: { value: number; max: num
 }
 
 // ------------------------------------------------------------------ portraits
-const CROPS: Record<HeroId, [number, number, number, number]> = {
-  aragorn: [56, 24, 150, 150], gimli: [50, 30, 150, 150], frodo: [56, 30, 140, 140], legolas: [60, 14, 150, 150],
-  boromir: [50, 24, 160, 160], sam: [56, 30, 140, 140], gandalf: [70, 0, 150, 150],
+/** the head of each sprite, as a 40x40 window into the native pixel art (shown at 4x, so it stays crisp) */
+const CROPS: Record<HeroId, [number, number]> = {
+  aragorn: [12, 4], gimli: [13, 26], frodo: [12, 32], legolas: [13, 5],
+  boromir: [12, 4], sam: [12, 32], gandalf: [14, 0],
 };
 
 export function HeroPortrait({ id, size = 'md', className, ko }: { id: HeroId; size?: 'sm' | 'md' | 'lg'; className?: string; ko?: boolean }) {
@@ -146,9 +154,10 @@ export function HeroPortrait({ id, size = 'md', className, ko }: { id: HeroId; s
     const c = ref.current; if (!c) return;
     c.width = 160; c.height = 160;
     const x = c.getContext('2d'); if (!x) return;
+    x.imageSmoothingEnabled = false;
     x.clearRect(0, 0, 160, 160);
-    const [sx, sy, sw, sh] = CROPS[id];
-    x.drawImage(paintHero(id), sx, sy, sw, sh, 0, 0, 160, 160);
+    const [sx, sy] = CROPS[id];
+    x.drawImage(paintHero(id), sx, sy, 40, 40, 0, 0, 160, 160);
   }, [id]);
   return <div className={`portrait ${size} ${className ?? ''}`} style={ko ? { filter: 'grayscale(1)', opacity: 0.6 } : undefined}><canvas ref={ref} aria-hidden="true" /></div>;
 }
@@ -159,9 +168,12 @@ export function EnemyPortrait({ id, size = 'md' }: { id: string; size?: 'sm' | '
     const c = ref.current; if (!c) return;
     c.width = 160; c.height = 160;
     const x = c.getContext('2d'); if (!x) return;
+    x.imageSmoothingEnabled = false;
     x.clearRect(0, 0, 160, 160);
     const def = ENEMIES[id]; if (!def) return;
-    x.drawImage(paintCreature(def), 0, 0, 256, 256, 0, 0, 160, 160);
+    // whole-number zoom, centred, so every pixel is square
+    const cv = paintCreature(def), k = Math.max(1, Math.floor(160 / cv.width));
+    x.drawImage(cv, 0, 0, cv.width, cv.height, Math.round((160 - cv.width * k) / 2), 160 - cv.height * k, cv.width * k, cv.height * k);
   }, [id]);
   return <div className={`portrait ${size}`}><canvas ref={ref} aria-hidden="true" /></div>;
 }

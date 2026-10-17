@@ -43,3 +43,14 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [ ] No store packaging. The game is a PWA; there is no Steam/app-store wrapper.
 - [ ] Not deployed. By design (see RIGHTS.md) this fan-concept build stays private; do not publish it, or put it on the games hub or newsletter, without an Original-reskin decision first.
 - [ ] Optional polish: per-hero voice barks, localisation, more event art.
+
+## Visual overhaul — "Pixel Delve" (2026-10-18)
+- [x] Pixel engine (`src/art/pixel/engine.ts`): shape masks, inflate-shaded, hue-shifted 5-step ramps, ordered dither, outer + selective inner outlines. DOM-free; covered by `tests/pixel.test.ts`.
+- [x] 7 heroes redrawn natively at 72×92 (faces with highlights, Boromir's shield and horn, Sam's pan and pack, Gandalf's glowing orb).
+- [x] 80 enemies, 10 chapter rooms × 8 shapes and the camp: painted procedurally, then pixelised (`pixelize.ts`: 3:1 for creatures, 2:1 for scenery) with palette quantising, dithering and outlines; scenery layers drift in whole-pixel steps.
+- [x] One art pixel = 2 stage pixels everywhere; Phaser in `pixelArt` + `roundPixels` mode; sprites, glows (dithered), shadows (dithered), particles (single pixels), projectiles, slash and spark hit effects are native-pixel textures.
+- [x] UI skin: notched 4px frames, flat bevels, segmented bars, 111 icons rasterised to 16×16 masks, Jersey 15 pixel font (bundled, ligatures off), pixel portraits cropped from the sprites at 4×.
+- [x] Title screen shows the company at the gate.
+- [~] Sprites have a two-pixel idle bob, a lunge and a flash but no hand-drawn animation frames (idle/attack poses per hero would be the next art step).
+- [~] Creatures share the heroes' palette logic but are pixelised paintings, not hand-placed pixels; the goblin family shares one body plan.
+- Verified: typecheck, 203 unit tests, build, e2e 8/8, monkey run (136 clicks, 0 errors), ~56 fps battle scene.

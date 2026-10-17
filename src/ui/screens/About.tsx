@@ -25,7 +25,7 @@ export function AboutScreen() {
       <Section title="Open-source components">
         <ul className="small" style={{ lineHeight: 1.6, paddingLeft: '1.2rem' }}>
           <li>Phaser 4 (MIT) — battle rendering · React 18 (MIT) — interface · Vite &amp; TypeScript — tooling</li>
-          <li>EB Garamond and Cormorant Garamond (SIL Open Font License 1.1), via Fontsource, bundled locally</li>
+          <li>Jersey 15 (SIL Open Font License 1.1), via Fontsource, bundled locally</li>
         </ul>
         <p className="tiny dim">The full manifest is in docs/ASSETS.md and docs/RIGHTS.md in the project.</p>
       </Section>

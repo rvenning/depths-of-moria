@@ -1,7 +1,8 @@
 import type { HeroId } from '../content/schema.ts';
-import { paintBackground } from './backgrounds.ts';
 import { INK, PEN, alpha, circle, ctx2d, ellipse, glow, limb, line, makeCanvas, poly, shade, type Ctx } from './draw.ts';
-import { HERO_SCALE, paintHero } from './heroes.ts';
+import { HERO_FOOT, HERO_H, HERO_W, paintHero } from './heroes.ts';
+import { PIX, paintBackgroundVector } from './backgrounds.ts';
+import { pixelize } from './pixel/pixelize.ts';
 
 export const CAMP_W = 960;
 export const CAMP_H = 480;
@@ -78,7 +79,7 @@ export function paintCamp(chapter: number, party: HeroId[]): HTMLCanvasElement {
   if (campCache?.key === key) return campCache.cv;
   const cv = makeCanvas(CAMP_W, CAMP_H);
   const c = ctx2d(cv);
-  const L = paintBackground(chapter, 'cavern', 7);
+  const L = paintBackgroundVector(chapter, 'cavern', 7);
   for (const l of [L.far, L.mid, L.floor]) c.drawImage(l, 0, 0, CAMP_W, CAMP_H);
   const W = CAMP_W; const H = CAMP_H;
   const gy = H * 0.7;
@@ -91,24 +92,22 @@ export function paintCamp(chapter: number, party: HeroId[]): HTMLCanvasElement {
   noticeBoard(c, W * 0.34, gy + 96, 0.9);
   lectern(c, W * 0.62, gy + 96, 0.95);
   campfire(c, W * 0.5, gy + 78);
-  // the party sits around the fire
-  const spots = [[0.43, 0.88], [0.57, 0.88], [0.38, 0.93], [0.62, 0.93], [0.5, 0.96]];
-  party.slice(0, 5).forEach((id, i) => {
-    const [fx, fy] = spots[i];
-    const s = 0.36 * (HERO_SCALE[id] ?? 1);
-    const sp = paintHero(id);
-    c.save();
-    c.translate(W * fx, H * fy);
-    c.globalAlpha = 0.98;
-    c.drawImage(sp, -128 * s, -238 * s, 256 * s, 256 * s);
-    c.restore();
-  });
   // cave frame
   c.drawImage(L.near, 0, 0, CAMP_W, CAMP_H);
   const vg = c.createRadialGradient(W / 2, H * 0.6, H * 0.3, W / 2, H * 0.6, H * 0.95);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
   c.fillStyle = vg; c.fillRect(0, 0, W, H);
   void ellipse; void shade; void alpha;
-  campCache = { key, cv };
-  return cv;
+  // the whole painted scene is boiled down to pixel art, then the party (native pixel sprites) stands around the fire
+  const out = makeCanvas(CAMP_W, CAMP_H); const oc = ctx2d(out);
+  oc.imageSmoothingEnabled = false;
+  oc.drawImage(pixelize(cv, { outW: CAMP_W / PIX, outH: CAMP_H / PIX, levels: 8, dither: 0.8 }), 0, 0, CAMP_W, CAMP_H);
+  const spots = [[0.40, 0.80], [0.52, 0.80], [0.64, 0.80], [0.34, 0.95], [0.58, 0.95]];
+  party.slice(0, 5).forEach((id, i) => {
+    const [fx, fy] = spots[i];
+    const fxp = Math.round(W * fx / PIX) * PIX, fyp = Math.round(H * fy / PIX) * PIX;
+    oc.drawImage(paintHero(id), fxp - (HERO_W * PIX) / 2, fyp - HERO_FOOT * PIX, HERO_W * PIX, HERO_H * PIX);
+  });
+  campCache = { key, cv: out };
+  return out;
 }

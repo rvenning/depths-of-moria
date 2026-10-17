@@ -1,4 +1,5 @@
 import type { CreatureFamily, EnemyDef } from '../content/schema.ts';
+import { pixelize } from './pixel/pixelize.ts';
 import {
   INK, circle, ctx2d, ellipse, eye, glow, groundShadow, limb, line, makeCanvas, mix, poly, rand, rimLight, shade, alpha, PEN, type Ctx, type Pt,
 } from './draw.ts';
@@ -469,7 +470,7 @@ const PAINTERS: Record<CreatureFamily, Painter> = {
 // ---------------------------------------------------------------- public
 const cache = new Map<string, HTMLCanvasElement>();
 
-export function paintCreature(def: EnemyDef): HTMLCanvasElement {
+function paintCreatureVector(def: EnemyDef): HTMLCanvasElement {
   const hit = cache.get(def.id);
   if (hit) return hit;
   const cv = makeCanvas(SPRITE, SPRITE);
@@ -485,4 +486,20 @@ export function paintCreature(def: EnemyDef): HTMLCanvasElement {
   cache.set(def.id, cv);
   return cv;
 }
-export function creatureFootprint(): { w: number; h: number; baseY: number } { return { w: SPRITE, h: SPRITE, baseY: 238 }; }
+
+// ---------------------------------------------------------------- pixel version
+const pixCache = new Map<string, HTMLCanvasElement>();
+/** native pixel width of an enemy sprite whose art scale is 1 (the painting is boiled down 3:1) */
+export const CREATURE_PIX = Math.round(SPRITE / 3);
+/** the painted creature, boiled down to pixel art (shown at an integer zoom, so a bigger monster is simply a bigger sprite) */
+export function paintCreature(def: EnemyDef): HTMLCanvasElement {
+  const hit = pixCache.get(def.id);
+  if (hit) return hit;
+  const k = (def.scale ?? 1) * (def.tier === 'boss' ? 1.05 : 1);
+  const n = Math.round(CREATURE_PIX * k);
+  const cv = pixelize(paintCreatureVector(def), { outW: n, outH: n, outline: true, levels: 7, dither: 0.45 });
+  pixCache.set(def.id, cv);
+  return cv;
+}
+/** where the soles sit, as a fraction of the sprite height */
+export const CREATURE_FOOT = 238 / 256;

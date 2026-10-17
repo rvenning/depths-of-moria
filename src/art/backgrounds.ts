@@ -1,9 +1,13 @@
 import { CHAPTER_BY_N } from '../content/chapters.ts';
 import { alpha, ctx2d, glow, makeCanvas, mix, rand, shade, stoneTexture, type Ctx } from './draw.ts';
+import { padCanvas, pixelize } from './pixel/pixelize.ts';
 
 export const BG_W = 960;
 export const BG_H = 480;
 export const HORIZON = 0.66; // floor line as a fraction of height
+/** one art pixel is PIX stage pixels; the pixel layers carry BG_PAD extra native pixels on every side so they can drift */
+export const PIX = 2;
+export const BG_PAD = 8;
 
 export interface Light { x: number; y: number; r: number; color: string; flicker: number }
 export interface BgLayers {
@@ -255,12 +259,12 @@ const DRESS: Record<string, Dress> = {
 };
 
 // ------------------------------------------------------------------ public
-const cache = new Map<string, BgLayers>();
-const order: string[] = [];
+const vcache = new Map<string, BgLayers>();
+const vorder: string[] = [];
 
-export function paintBackground(chapter: number, variant: string, seed = 1): BgLayers {
+export function paintBackgroundVector(chapter: number, variant: string, seed = 1): BgLayers {
   const key = `${chapter}:${variant}`;
-  const hit = cache.get(key);
+  const hit = vcache.get(key);
   if (hit) return hit;
   const ch = CHAPTER_BY_N(chapter);
   const pal = ch.palette;
@@ -275,8 +279,29 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   paintFloor(flc, w, h, pal, ch.theme, s);
   const particles: BgLayers['particles'] = ({ gate: 'dust', gallery: 'dust', forge: 'embers', stair: 'dust', halls: 'motes', flooded: 'bubbles', archives: 'motes', chasm: 'sparks', flame: 'embers', bridge: 'embers' } as const)[ch.theme as 'gate'] ?? 'dust';
   const layers: BgLayers = { far, mid, floor, near, lights, theme: ch.theme, variant, particles };
-  cache.set(key, layers); order.push(key);
-  while (order.length > 6) cache.delete(order.shift() as string);
+  vcache.set(key, layers); vorder.push(key);
+  while (vorder.length > 3) vcache.delete(vorder.shift() as string);
+  return layers;
+}
+
+// ------------------------------------------------------------------ pixel version
+const pcache = new Map<string, BgLayers>();
+const porder: string[] = [];
+
+export function paintBackground(chapter: number, variant: string, seed = 1): BgLayers {
+  const key = `${chapter}:${variant}`;
+  const hit = pcache.get(key);
+  if (hit) return hit;
+  const v = paintBackgroundVector(chapter, variant, seed);
+  const nw = BG_W / PIX, nh = BG_H / PIX;
+  const px = (cv: HTMLCanvasElement, o: { levels: number; dither: number; alphaDither?: boolean }): HTMLCanvasElement => padCanvas(pixelize(cv, { outW: nw, outH: nh, ...o }), BG_PAD);
+  const layers: BgLayers = {
+    far: px(v.far, { levels: 9, dither: 0.9 }), mid: px(v.mid, { levels: 7, dither: 0.6, alphaDither: true }),
+    floor: px(v.floor, { levels: 8, dither: 0.8 }), near: px(v.near, { levels: 6, dither: 0.6, alphaDither: true }),
+    lights: v.lights, theme: v.theme, variant: v.variant, particles: v.particles,
+  };
+  pcache.set(key, layers); porder.push(key);
+  while (porder.length > 6) pcache.delete(porder.shift() as string);
   return layers;
 }
 
@@ -291,9 +316,12 @@ export function compositeBackground(chapter: number, variant: string, w = 640, h
   const hit = thumbs.get(key);
   if (hit) return hit;
   const L = paintBackground(chapter, variant);
+  const nw = BG_W / PIX, nh = BG_H / PIX;
+  const nat = makeCanvas(nw, nh); const nc = ctx2d(nat); nc.imageSmoothingEnabled = false;
+  for (const l of [L.far, L.mid, L.floor, L.near]) nc.drawImage(l, BG_PAD, BG_PAD, nw, nh, 0, 0, nw, nh);
   const cv = makeCanvas(w, h); const c = ctx2d(cv);
-  for (const l of [L.far, L.mid, L.floor, L.near]) c.drawImage(l, 0, 0, w, h);
-  for (const lt of L.lights) glow(c, (lt.x / BG_W) * w, (lt.y / BG_H) * h, (lt.r / BG_W) * w * 0.8, lt.color, 0.25);
+  c.imageSmoothingEnabled = w < nw; c.imageSmoothingQuality = 'high';
+  c.drawImage(nat, 0, 0, w, h);
   thumbs.set(key, cv);
   return cv;
 }

@@ -1,16 +1,19 @@
 import Phaser from 'phaser';
-import { BG_H, BG_W, HORIZON, type BgLayers } from '../art/backgrounds.ts';
-import { paintCreature } from '../art/creatures.ts';
-import { HERO_SCALE, paintHero } from '../art/heroes.ts';
+import { BG_H, BG_PAD, BG_W, HORIZON, PIX, type BgLayers } from '../art/backgrounds.ts';
+import { CREATURE_FOOT, paintCreature } from '../art/creatures.ts';
+import { HERO_FOOT, HERO_H, paintHero } from '../art/heroes.ts';
 import { ENEMIES } from '../content/enemies.ts';
 import { HEROES } from '../content/heroes.ts';
 import { STATUSES } from '../content/statuses.ts';
-import type { HeroId, StatusId } from '../content/schema.ts';
+import type { StatusId } from '../content/schema.ts';
 import type { BEvent, UnitView } from '../core/battle/types.ts';
 
 export const STAGE_W = BG_W;
 export const STAGE_H = BG_H;
-const FOOT = 238 / 256;
+/** the UI font (a bundled pixel face) */
+const FONT = "'Jersey 15', monospace";
+/** one art pixel is PIX stage pixels, so every sprite is shown at exactly PIX times its native size */
+const ZOOM = PIX;
 
 const HERO_COLOR = '#9ec3ff';
 const ENEMY_COLOR = '#ffb09a';
@@ -20,7 +23,7 @@ interface Node {
   view: UnitView;
   c: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
-  shadow: Phaser.GameObjects.Ellipse;
+  shadow: Phaser.GameObjects.Image;
   ring: Phaser.GameObjects.Ellipse;
   bar: Phaser.GameObjects.Graphics;
   hpText: Phaser.GameObjects.Text;
@@ -50,10 +53,12 @@ export function slotPos(side: 'hero' | 'enemy', slot: number, scale: number): { 
   const mid = STAGE_W / 2;
   const floorY = STAGE_H * HORIZON;
   let x: number; let y: number;
-  if (slot < 3) { x = mid - cx * (112 + slot * 58); y = floorY + 44 + slot * 58; }
-  else { const j = slot - 3; x = mid - cx * (300 + j * 54); y = floorY + 72 + j * 66; }
-  if (scale > 1.4) { x = mid + 170; y = floorY + 100; }
-  return { x, y };
+  // a front row of three stepping down-and-out, with the back row standing in the gaps behind them
+  if (slot < 3) { x = mid - cx * (110 + slot * 120); y = floorY + 62 + slot * 18; }
+  else { const j = slot - 3; x = mid - cx * (170 + j * 120); y = floorY + 2 + j * 6; }
+  if (scale > 1.4) { x = mid + 190; y = floorY + 100; }
+  // keep every foot on the pixel grid
+  return { x: Math.round(x / ZOOM) * ZOOM, y: Math.round(y / ZOOM) * ZOOM };
 }
 
 export class BattleScene extends Phaser.Scene {
@@ -82,16 +87,49 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private makeTextures(): void {
-    const mk = (key: string, draw: (c: CanvasRenderingContext2D) => void, w = 64, h = 64) => {
+    const mk = (key: string, w: number, h: number, draw: (c: CanvasRenderingContext2D) => void) => {
       if (this.textures.exists(key)) return;
       const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-      const c = cv.getContext('2d') as CanvasRenderingContext2D; draw(c);
+      const c = cv.getContext('2d') as CanvasRenderingContext2D; c.imageSmoothingEnabled = false; draw(c);
       this.textures.addCanvas(key, cv);
     };
-    mk('dot', (c) => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); });
-    mk('ringtex', (c) => { c.lineWidth = 5; c.strokeStyle = '#fff'; c.beginPath(); c.arc(32, 32, 26, 0, Math.PI * 2); c.stroke(); });
-    mk('spark', (c) => { c.fillStyle = '#fff'; c.beginPath(); c.moveTo(32, 2); c.lineTo(38, 26); c.lineTo(62, 32); c.lineTo(38, 38); c.lineTo(32, 62); c.lineTo(26, 38); c.lineTo(2, 32); c.lineTo(26, 26); c.closePath(); c.fill(); });
-    mk('streak', (c) => { const g = c.createLinearGradient(0, 0, 64, 0); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,1)'); c.fillStyle = g; c.fillRect(0, 26, 64, 12); }, 64, 64);
+    const px = (c: CanvasRenderingContext2D, color: string, rows: string[]) => { c.fillStyle = color; rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] === '#') c.fillRect(x, y, 1, 1); }); };
+    // every texture below is a handful of native pixels, shown at PIX x
+    mk('dot', 3, 3, (c) => px(c, '#fff', ['.#.', '###', '.#.']));
+    mk('dotL', 5, 5, (c) => px(c, '#fff', ['.###.', '#####', '#####', '#####', '.###.']));
+    mk('ringtex', 32, 32, (c) => px(c, '#fff', ['..........########..........', '.......###........###.......', '.....##..............##.....']));
+    mk('spark', 9, 9, (c) => px(c, '#fff', ['....#....', '....#....', '...###...', '.#######.', '#########', '.#######.', '...###...', '....#....', '....#....']));
+    mk('slash', 16, 16, (c) => px(c, '#fff', ['.............##.', '...........####.', '.........####...', '.......####.....', '......###.......', '.....###........', '....###.........', '....###.........', '....###.........', '....###.........', '.....###........', '......###.......', '.......####.....', '.........####...', '...........####.', '.............##.']));
+    mk('orb', 11, 11, (c) => { px(c, '#fff', ['...#####...', '..#######..', '.#########.', '###########', '###########', '###########', '###########', '###########', '.#########.', '..#######..', '...#####...']); c.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 6; i++) c.fillRect(2 + i, 8 - (i >> 1), 1, 1); });
+    mk('streak', 24, 5, (c) => { px(c, '#fff', ['.......................#', '.....##################', '.....###################', '.....##################', '.......................#']); c.fillStyle = 'rgba(255,255,255,0.45)'; for (let x = 0; x < 5; x++) c.fillRect(x, 2, 1, 1); });
+  }
+
+  /** a light's glow: a radial falloff turned into ordered-dither dots, so it stays pixel art */
+  private glowTexture(radiusNative: number): string {
+    const key = `glow:${radiusNative}`;
+    if (this.textures.exists(key)) return key;
+    const n = radiusNative * 2, cv = document.createElement('canvas'); cv.width = n; cv.height = n;
+    const c = cv.getContext('2d') as CanvasRenderingContext2D; const img = c.createImageData(n, n);
+    const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const d = Math.hypot(x + 0.5 - radiusNative, y + 0.5 - radiusNative) / radiusNative;
+      const a = d >= 1 ? 0 : (1 - d) * (1 - d);
+      if (a > (B[((y & 3) << 2) | (x & 3)] + 0.5) / 16 * 0.9) { const i = (y * n + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = 255; }
+    }
+    c.putImageData(img, 0, 0); this.textures.addCanvas(key, cv); return key;
+  }
+
+  /** a dithered ground shadow, wNative pixels wide */
+  private shadowTexture(wNative: number): string {
+    const key = `sh:${wNative}`;
+    if (this.textures.exists(key)) return key;
+    const h = Math.max(5, Math.round(wNative / 5)), cv = document.createElement('canvas'); cv.width = wNative; cv.height = h;
+    const c = cv.getContext('2d') as CanvasRenderingContext2D; c.fillStyle = '#05030a';
+    for (let y = 0; y < h; y++) for (let x = 0; x < wNative; x++) {
+      const dx = (x + 0.5 - wNative / 2) / (wNative / 2), dy = (y + 0.5 - h / 2) / (h / 2), d = Math.hypot(dx, dy);
+      if (d < 0.62 || (d < 1 && ((x + y) & 1) === 0)) c.fillRect(x, y, 1, 1);
+    }
+    this.textures.addCanvas(key, cv); return key;
   }
 
   // ------------------------------------------------------------------ setup
@@ -125,33 +163,36 @@ export class BattleScene extends Phaser.Scene {
     const add = (name: string, cv: HTMLCanvasElement, depth: number) => {
       const key = `bg:${bg.theme}:${bg.variant}:${name}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, cv);
-      const img = this.add.image(STAGE_W / 2, STAGE_H / 2, key).setDisplaySize(STAGE_W + 24, STAGE_H + 8).setDepth(depth);
+      // the layer is BG_PAD native pixels larger on every side, so showing it at exactly ZOOM keeps every pixel square
+      const img = this.add.image(STAGE_W / 2, STAGE_H / 2, key).setScale(ZOOM).setDepth(depth);
       this.layers.push(img);
       return img;
     };
     add('far', bg.far, -40); add('mid', bg.mid, -30); add('floor', bg.floor, -20);
-    const near = add('near', bg.near, 9000);
-    near.setAlpha(0.95);
+    add('near', bg.near, 9000);
+    void BG_PAD;
     for (const l of bg.lights) {
-      const img = this.add.image(l.x, l.y, 'dot').setBlendMode(Phaser.BlendModes.ADD).setDepth(-10).setTint(Phaser.Display.Color.HexStringToColor(this.hexOf(l.color)).color);
-      img.setDisplaySize(l.r * 2, l.r * 2).setAlpha(0.28);
-      this.bgLights.push({ img, base: 0.28, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
+      const R = Math.max(8, Math.round(l.r / ZOOM / 8) * 8);
+      const x = Math.round(l.x / ZOOM) * ZOOM, y = Math.round(l.y / ZOOM) * ZOOM;
+      const img = this.add.image(x, y, this.glowTexture(R)).setScale(ZOOM).setBlendMode(Phaser.BlendModes.ADD).setDepth(-10).setTint(Phaser.Display.Color.HexStringToColor(this.hexOf(l.color)).color);
+      img.setAlpha(0.4);
+      this.bgLights.push({ img, base: 0.4, speed: 0.004 + Math.random() * 0.004, flick: l.flicker });
     }
-    // ambient particles
+    // ambient particles: single pixels drifting
     if (!this.reduced) {
-      const cfg: Record<string, { tint: number; speedY: [number, number]; alpha: number; scale: number; count: number }> = {
-        embers: { tint: 0xffa040, speedY: [-30, -80], alpha: 0.8, scale: 0.12, count: 90 },
-        dust: { tint: 0xd8d0b8, speedY: [-4, 6], alpha: 0.35, scale: 0.08, count: 220 },
-        mist: { tint: 0xb8c8d8, speedY: [-3, 3], alpha: 0.25, scale: 0.2, count: 300 },
-        bubbles: { tint: 0x9affd0, speedY: [-18, -40], alpha: 0.4, scale: 0.1, count: 200 },
-        sparks: { tint: 0xc8a0ff, speedY: [-8, 8], alpha: 0.7, scale: 0.07, count: 160 },
-        motes: { tint: 0xffe8b0, speedY: [-6, 4], alpha: 0.5, scale: 0.08, count: 200 },
+      const cfg: Record<string, { tint: number; speedY: [number, number]; alpha: number; tex: string; freq: number }> = {
+        embers: { tint: 0xffa040, speedY: [-30, -80], alpha: 0.9, tex: 'dot', freq: 110 },
+        dust: { tint: 0xd8d0b8, speedY: [-4, 6], alpha: 0.45, tex: 'dot', freq: 160 },
+        mist: { tint: 0xb8c8d8, speedY: [-3, 3], alpha: 0.22, tex: 'dotL', freq: 200 },
+        bubbles: { tint: 0x9affd0, speedY: [-18, -40], alpha: 0.5, tex: 'dotL', freq: 220 },
+        sparks: { tint: 0xc8a0ff, speedY: [-8, 8], alpha: 0.8, tex: 'dot', freq: 150 },
+        motes: { tint: 0xffe8b0, speedY: [-6, 4], alpha: 0.6, tex: 'dot', freq: 150 },
       };
       const p = cfg[bg.particles];
-      const em = this.add.particles(0, 0, 'dot', {
+      const em = this.add.particles(0, 0, p.tex, {
         x: { min: 0, max: STAGE_W }, y: { min: STAGE_H * 0.3, max: STAGE_H }, speedX: { min: -10, max: 10 }, speedY: { min: p.speedY[0], max: p.speedY[1] },
-        lifespan: { min: 3000, max: 6000 }, scale: { start: p.scale, end: 0 }, alpha: { start: p.alpha, end: 0 }, tint: p.tint,
-        frequency: 160, quantity: 1, blendMode: 'ADD',
+        lifespan: { min: 3000, max: 6000 }, scale: ZOOM, alpha: { start: p.alpha, end: 0 }, tint: p.tint,
+        frequency: p.freq, quantity: 1, blendMode: 'ADD',
       }).setDepth(-5);
       this.emitters.push(em);
     }
@@ -175,27 +216,25 @@ export class BattleScene extends Phaser.Scene {
     return key;
   }
 
-  private scaleFor(u: UnitView): number {
-    const base = 0.66;
-    if (u.side === 'hero') return base * (HERO_SCALE[u.heroId as HeroId] ?? 1);
-    return base * (u.scale ?? 1) * (u.tier === 'boss' ? 1.05 : 1);
-  }
+  /** sprites are always shown at exactly ZOOM; a bigger monster is a bigger native sprite (see paintCreature) */
+  private footOf(u: UnitView): number { return u.side === 'hero' ? HERO_FOOT / HERO_H : CREATURE_FOOT; }
 
   addUnit(u: UnitView, animate = true): void {
     if (this.nodes.has(u.uid)) return;
-    const scale = this.scaleFor(u);
+    const scale = ZOOM;
     const pos = slotPos(u.side, u.slot, u.scale);
     const facing = u.side === 'hero' ? 1 : -1;
     const c = this.add.container(pos.x, pos.y);
-    const shadow = this.add.ellipse(0, -2, 80 * scale * 1.5, 16 * scale * 1.5, 0x000000, 0.45);
-    const ring = this.add.ellipse(0, -2, 100 * scale * 1.5, 22 * scale * 1.5).setStrokeStyle(3, 0xffe08a, 1).setAlpha(0);
-    const sprite = this.add.image(0, 0, this.textureFor(u)).setOrigin(0.5, FOOT).setScale(scale * (u.side === 'hero' ? 1 : 1));
+    const sprite = this.add.image(0, 0, this.textureFor(u)).setOrigin(0.5, this.footOf(u)).setScale(scale);
+    const wNative = Math.round(sprite.width * 0.7);
+    const shadow = this.add.image(0, -ZOOM, this.shadowTexture(wNative)).setScale(ZOOM).setAlpha(0.8);
+    const ring = this.add.ellipse(0, -2, wNative * ZOOM * 1.1, wNative * ZOOM * 0.22).setStrokeStyle(2, 0xffe08a, 1).setAlpha(0);
     // sprites are painted facing: heroes → right, enemies → left. nothing to flip.
     const bar = this.add.graphics();
-    const w = Math.max(60, 74 * Math.min(1.3, u.scale ?? 1));
-    const name = this.add.text(0, 6, u.name, { fontFamily: 'Georgia, serif', fontSize: '10px', color: u.side === 'hero' ? HERO_COLOR : ENEMY_COLOR, stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
-    const hpText = this.add.text(0, 20, '', { fontFamily: 'Georgia, serif', fontSize: '9px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
-    const icons = this.add.container(0, -sprite.displayHeight * FOOT - 6);
+    const w = Math.max(48, Math.min(104, Math.round(sprite.width * ZOOM * 0.5 / 4) * 4));
+    const name = this.add.text(0, 6, u.name, { fontFamily: FONT, fontSize: '16px', color: u.side === 'hero' ? HERO_COLOR : ENEMY_COLOR, stroke: '#0b0714', strokeThickness: 3 }).setOrigin(0.5, 0);
+    const hpText = this.add.text(0, 20, '', { fontFamily: FONT, fontSize: '16px', color: '#fff', stroke: '#0b0714', strokeThickness: 3 }).setOrigin(0.5, 0);
+    const icons = this.add.container(0, -sprite.displayHeight * this.footOf(u) - 10);
     c.add([shadow, ring, sprite, bar, name, hpText, icons]);
     c.setDepth(pos.y);
     const node: Node = {
@@ -205,33 +244,37 @@ export class BattleScene extends Phaser.Scene {
     this.nodes.set(u.uid, node);
     this.drawBar(node, w);
     if (!this.reduced) {
-      node.idle = this.tweens.add({ targets: sprite, scaleY: scale * 1.025, scaleX: scale * 0.99, duration: 900 + Math.random() * 500, yoyo: true, repeat: -1, ease: 'sine.inOut', delay: Math.random() * 600 });
+      // a two-pixel breath: whole-pixel steps keep the sprite crisp
+      node.idle = this.tweens.add({ targets: sprite, y: -ZOOM, duration: 700 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'stepped', easeParams: [2], delay: Math.random() * 600 });
     }
     if (animate) {
-      c.setAlpha(0).setScale(0.6);
-      this.tweens.add({ targets: c, alpha: 1, scale: 1, duration: 300 / this.speed, ease: 'back.out' });
+      c.setAlpha(0);
+      this.tweens.add({ targets: c, alpha: 1, duration: 300 / this.speed, ease: 'stepped', easeParams: [4] });
       this.puff(pos.x, pos.y - 30, 0xffffff);
     }
   }
 
-  private drawBar(n: Node, w = 70): void {
+  private drawBar(n: Node, w = 72): void {
     const g = n.bar; g.clear();
     const frac = Math.max(0, Math.min(1, n.shownHp / n.maxHp));
     const x = -w / 2; const y = 17;
-    g.fillStyle(0x000000, 0.8); g.fillRoundedRect(x - 1, y - 1, w + 2, 7, 3);
-    g.fillStyle(0x2a0e0c, 1); g.fillRoundedRect(x, y, w, 5, 2);
-    const col = n.side === 'hero' ? (frac > 0.5 ? 0x5fd88a : frac > 0.25 ? 0xe8c64a : 0xe05a4a) : 0xd85a4a;
-    g.fillStyle(col, 1); g.fillRoundedRect(x, y, Math.max(0, w * frac), 5, 2);
+    g.fillStyle(0x0b0714, 1); g.fillRect(x - 2, y - 2, w + 4, 10);
+    g.fillStyle(0x3a1c2a, 1); g.fillRect(x, y, w, 6);
+    const col = n.side === 'hero' ? (frac > 0.5 ? 0x62d98b : frac > 0.25 ? 0xe8c64a : 0xe05a4a) : 0xe0564a;
+    const lit = n.side === 'hero' ? (frac > 0.5 ? 0xa6f0bf : frac > 0.25 ? 0xfbe58a : 0xff9a8a) : 0xff9a8a;
+    const fw = Math.round(Math.max(0, w * frac) / 2) * 2;
+    g.fillStyle(col, 1); g.fillRect(x, y, fw, 6);
+    g.fillStyle(lit, 1); g.fillRect(x, y, fw, 2);
     n.hpText.setText(`${Math.max(0, Math.round(n.shownHp))}`);
-    n.hpText.setY(24);
-    n.name.setY(3);
-    if (n.view.tier === 'boss') { n.name.setFontSize('12px'); }
+    n.hpText.setY(28);
+    n.name.setY(0);
+    if (n.view.tier === 'boss') { n.name.setFontSize('18px'); }
   }
 
   private setHp(n: Node, hp: number, dur = 260): void {
     n.hp = hp;
     const from = n.shownHp;
-    const w = Math.max(60, 74 * Math.min(1.3, n.view.scale ?? 1));
+    const w = Math.max(48, Math.min(104, Math.round(n.sprite.width * ZOOM * 0.5 / 4) * 4));
     if (this.reduced || dur <= 0) { n.shownHp = hp; this.drawBar(n, w); return; }
     this.tweens.addCounter({ from, to: hp, duration: dur / this.speed, onUpdate: (t) => { n.shownHp = t.getValue() ?? hp; this.drawBar(n, w); }, onComplete: () => { n.shownHp = hp; this.drawBar(n, w); } });
   }
@@ -246,7 +289,7 @@ export class BattleScene extends Phaser.Scene {
   private pos(n: Node): { x: number; y: number } { return { x: n.c.x, y: n.c.y - n.sprite.displayHeight * 0.5 }; }
 
   private popText(x: number, y: number, text: string, color: string, size = 18, dur = 900): void {
-    const t = this.add.text(x, y, text, { fontFamily: 'Georgia, serif', fontSize: `${size}px`, color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold' }).setOrigin(0.5).setDepth(9500);
+    const t = this.add.text(x, y, text, { fontFamily: FONT, fontSize: `${Math.round(size * 1.3)}px`, color, stroke: '#0b0714', strokeThickness: 4 }).setOrigin(0.5).setDepth(9500);
     this.fxLayer?.add(t);
     if (this.reduced) { this.time.delayedCall(dur / this.speed, () => t.destroy()); return; }
     this.tweens.add({ targets: t, y: y - 42, alpha: { from: 1, to: 0 }, scale: { from: 1.25, to: 1 }, duration: dur / this.speed, ease: 'cubic.out', delay: 80 / this.speed, onComplete: () => t.destroy() });
@@ -254,9 +297,20 @@ export class BattleScene extends Phaser.Scene {
 
   private puff(x: number, y: number, tint: number, n = 8): void {
     if (this.reduced) return;
-    const e = this.add.particles(x, y, 'dot', { speed: { min: 40, max: 120 }, lifespan: 420, scale: { start: 0.25, end: 0 }, alpha: { start: 0.9, end: 0 }, tint, quantity: n, emitting: false, blendMode: 'ADD' }).setDepth(9400);
+    const e = this.add.particles(x, y, 'dot', { speed: { min: 40, max: 120 }, lifespan: 420, scale: ZOOM, alpha: { start: 0.9, end: 0 }, tint, quantity: n, emitting: false, blendMode: 'ADD' }).setDepth(9400);
     e.explode(n);
     this.time.delayedCall(700, () => e.destroy());
+  }
+
+  /** a blade arc or a spark burst where a hit lands, in whole-pixel steps */
+  private hitFx(n: Node, kind: string, crit: boolean): void {
+    if (this.reduced || kind === 'heal') return;
+    const p = this.pos(n);
+    const magic = kind === 'magic' || kind === 'dot';
+    const img = this.add.image(Math.round(p.x / ZOOM) * ZOOM + (n.side === 'hero' ? -8 : 8), Math.round(p.y / ZOOM) * ZOOM, magic ? 'spark' : 'slash')
+      .setScale(crit ? ZOOM * 2 : ZOOM).setDepth(9450).setTint(crit ? 0xffe08a : magic ? 0xb8d0ff : 0xffffff);
+    if (!magic) img.setAngle((n.side === 'hero' ? 180 : 0) + Phaser.Math.Between(-3, 3) * 10);
+    this.tweens.add({ targets: img, alpha: { from: 1, to: 0 }, duration: 240 / this.speed, ease: 'stepped', easeParams: [4], onComplete: () => img.destroy() });
   }
 
   private flash(n: Node, color = 0xffffff): void {
@@ -271,7 +325,7 @@ export class BattleScene extends Phaser.Scene {
 
   private bannerText(text: string, color = '#ffe08a', size = 22, y = 54, dur = 900): Promise<void> {
     this.banner?.destroy();
-    const t = this.add.text(STAGE_W / 2, y, text, { fontFamily: 'Georgia, serif', fontSize: `${size}px`, color, stroke: '#000', strokeThickness: 6, fontStyle: 'bold', align: 'center' }).setOrigin(0.5).setDepth(9800);
+    const t = this.add.text(STAGE_W / 2, y, text, { fontFamily: FONT, fontSize: `${Math.round(size * 1.3)}px`, color, stroke: '#0b0714', strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(9800);
     this.banner = t;
     if (this.reduced) { return this.wait(dur).then(() => { t.destroy(); }); }
     t.setAlpha(0).setScale(0.85);
@@ -280,7 +334,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private unitBanner(n: Node, text: string, color = '#fff', lift = 0): void {
-    const t = this.add.text(n.c.x, n.c.y - n.sprite.displayHeight * FOOT - 28 - lift, text, { fontFamily: 'Georgia, serif', fontSize: '13px', color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold' }).setOrigin(0.5).setDepth(9600);
+    const t = this.add.text(n.c.x, n.c.y - n.sprite.displayHeight * this.footOf(n.view) - 28 - lift, text, { fontFamily: FONT, fontSize: '17px', color, stroke: '#0b0714', strokeThickness: 4 }).setOrigin(0.5).setDepth(9600);
     this.fxLayer?.add(t);
     this.tweens.add({ targets: t, alpha: { from: 1, to: 0 }, y: t.y - 12, duration: 1100 / this.speed, delay: 250 / this.speed, onComplete: () => t.destroy() });
   }
@@ -325,6 +379,7 @@ export class BattleScene extends Phaser.Scene {
           if (a && ev.kind !== 'dot' && ev.kind !== 'hazard' && !firstHitDone && ev.kind !== 'reflect') { await this.projectile(a, t, ev.fx ?? skillFx, ev.kind); firstHitDone = true; }
           else if (a && a !== t && (ev.kind === 'phys' || ev.kind === 'magic' || ev.kind === 'true') && !this.reduced) await this.projectile(a, t, ev.fx ?? skillFx, ev.kind, true);
           this.flash(t, ev.kind === 'dot' ? 0xb86aff : 0xffffff);
+          this.hitFx(t, ev.kind, !!ev.crit);
           const col = ev.kind === 'magic' ? '#9ec8ff' : ev.kind === 'dot' ? '#d49aff' : ev.kind === 'reflect' ? '#ffd080' : ev.kind === 'hazard' ? '#ffa860' : t.side === 'hero' ? '#ff9a8a' : '#fff6d6';
           const shown = ev.absorbed && !ev.amount ? `(${ev.absorbed})` : `${ev.amount}`;
           this.popText(t.c.x, t.c.y - t.sprite.displayHeight * 0.7, ev.crit ? `${shown}!` : shown, ev.crit ? '#ffe04a' : col, ev.crit ? 26 : 18);
@@ -386,7 +441,7 @@ export class BattleScene extends Phaser.Scene {
           if (this.reduced) { t.c.setAlpha(0.15); } else {
             this.puff(t.c.x, this.pos(t).y, 0xffffff, 14);
             this.tweens.add({ targets: t.c, alpha: 0.12, y: t.c.y + 8, duration: 420 / this.speed, ease: 'quad.in' });
-            this.tweens.add({ targets: t.sprite, scaleY: t.baseScale * 0.7, angle: t.side === 'hero' ? -12 : 12, duration: 420 / this.speed });
+            this.tweens.add({ targets: t.sprite, angle: t.side === 'hero' ? -90 : 90, duration: 420 / this.speed, ease: 'stepped', easeParams: [3] });
           }
           await this.wait(320);
           break;
@@ -430,13 +485,13 @@ export class BattleScene extends Phaser.Scene {
     const now = this.time.now;
     if (now - this.lastQuote < 2500 / this.speed) return;
     this.lastQuote = now;
-    const t = this.add.text(n.c.x, n.c.y - n.sprite.displayHeight * FOOT - 46, `“${text}”`, { fontFamily: 'Georgia, serif', fontSize: '12px', color: '#f4ecd0', stroke: '#000', strokeThickness: 4, fontStyle: 'italic', wordWrap: { width: 170 }, align: 'center' }).setOrigin(0.5).setDepth(9650);
+    const t = this.add.text(n.c.x, n.c.y - n.sprite.displayHeight * this.footOf(n.view) - 46, `“${text}”`, { fontFamily: FONT, fontSize: '16px', color: '#f4ecd0', stroke: '#0b0714', strokeThickness: 4, fontStyle: 'italic', wordWrap: { width: 170 }, align: 'center' }).setOrigin(0.5).setDepth(9650);
     this.fxLayer?.add(t);
     this.tweens.add({ targets: t, alpha: { from: 1, to: 0 }, y: t.y - 10, duration: 1800 / this.speed, delay: 700 / this.speed, onComplete: () => t.destroy() });
   }
 
   private unitBannerAt(x: number, y: number, text: string, color: string): void {
-    const t = this.add.text(x, y, text, { fontFamily: 'Georgia, serif', fontSize: '14px', color, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(9600);
+    const t = this.add.text(x, y, text, { fontFamily: FONT, fontSize: '18px', color, stroke: '#0b0714', strokeThickness: 4 }).setOrigin(0.5).setDepth(9600);
     this.fxLayer?.add(t);
     this.tweens.add({ targets: t, alpha: { from: 1, to: 0 }, duration: 1300 / this.speed, onComplete: () => t.destroy() });
   }
@@ -463,14 +518,14 @@ export class BattleScene extends Phaser.Scene {
     if (on && !have) {
       const key = `ic:${STATUSES[id].glyph}:${STATUSES[id].kind}`;
       if (!this.textures.exists(key)) return;
-      const img = this.add.image(0, 0, key).setDisplaySize(15, 15);
+      const img = this.add.image(0, 0, key).setScale(1);
       n.icons.add(img); n.statuses.set(id, img);
       if (!this.reduced) this.tweens.add({ targets: img, scale: { from: 0.01, to: img.scale }, duration: 160 / this.speed, ease: 'back.out' });
     } else if (!on && have) {
       have.destroy(); n.statuses.delete(id);
     }
     let i = 0; const total = n.statuses.size;
-    for (const img of n.statuses.values()) { img.setPosition((i - (total - 1) / 2) * 16, 0); i++; }
+    for (const img of n.statuses.values()) { img.setPosition((i - (total - 1) / 2) * 18, 0); i++; }
   }
 
   // ------------------------------------------------------------------ attack choreography
@@ -508,8 +563,8 @@ export class BattleScene extends Phaser.Scene {
     const from = this.pos(a); const to = this.pos(t);
     const color = this.fxColor(fx);
     const isArrow = fx === 'arrow' || fx === 'volley' || fx === 'pierce';
-    const img = this.add.image(from.x, from.y, isArrow ? 'streak' : 'dot').setTint(color).setDepth(9300).setBlendMode(Phaser.BlendModes.ADD);
-    if (isArrow) { img.setRotation(Math.atan2(to.y - from.y, to.x - from.x)); img.setDisplaySize(52, 10); } else { img.setDisplaySize(34, 34); }
+    const img = this.add.image(from.x, from.y, isArrow ? 'streak' : 'orb').setTint(color).setDepth(9300).setBlendMode(Phaser.BlendModes.ADD);
+    if (isArrow) img.setRotation(Math.atan2(to.y - from.y, to.x - from.x)); img.setScale(ZOOM);
     await this.tween({ targets: img, x: to.x, y: to.y, duration: quick ? 90 : 190, ease: 'quad.in' });
     img.destroy();
   }
@@ -523,9 +578,9 @@ export class BattleScene extends Phaser.Scene {
     }
     if (!this.reduced && this.layers.length) {
       const d = Math.sin(this.driftT * 0.00025);
-      this.layers[0]?.setX(STAGE_W / 2 + d * 6);
-      this.layers[1]?.setX(STAGE_W / 2 + d * 12);
-      this.layers[3]?.setX(STAGE_W / 2 - d * 16);
+      this.layers[0]?.setX(STAGE_W / 2 + Math.round(d * 2) * ZOOM);
+      this.layers[1]?.setX(STAGE_W / 2 + Math.round(d * 4) * ZOOM);
+      this.layers[3]?.setX(STAGE_W / 2 - Math.round(d * 6) * ZOOM);
     }
   }
 
