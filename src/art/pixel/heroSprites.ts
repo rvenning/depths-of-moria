@@ -309,7 +309,7 @@ function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
     if (anim === 'dash') return { ...base, hand: [1, 0], tip: [0, 0], rhand: [-2, 0] };
     if (anim === 'wind' || anim === 'cast') return { ...base, hand: [1, -1], tip: [0, 0], rhand: [anim === 'wind' ? -6 : -4 - n * 2, 0], lean: base.lean };
     if (anim === 'strike') return { ...base, hand: [2, 5], rhand: [-1, 4], tip: [0, 0], lean: 7 };                                                                            // a low snap shot from the hip
-    if (anim === 'thrust') return { ...base, hand: [2, n === 0 ? -1 : -4], rhand: n === 0 ? [-8, -1] : n === 1 ? [3, -3] : [2, -4], tip: [0, 0], lean: n === 0 ? -5 : -2 };    // draw, then loose a high aimed shot
+    if (anim === 'thrust') return { ...base, hand: [2, -3], rhand: n === 0 ? [-4, -2] : [-9, -3], tip: [0, 0], lean: n === 0 ? -3 : -5 };                                  // draw to the cheek and hold the aim: the string is pulled back, unlike the low released strike
     if (anim === 'cast2') return { ...base, hand: [2, -6], rhand: n === 0 ? [-6, -5] : [2, -6], tip: [0, 0], lean: n === 0 ? -4 : -1 };    // a high volley, leaning back
     return { ...base, tip: [0, 0], hand: base.hand ?? [0, 0], rhand: anim === 'win' ? [2, -10] : base.rhand };
   }
