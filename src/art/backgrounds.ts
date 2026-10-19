@@ -296,7 +296,9 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   if (hit) return hit;
   const nw = BG_W / PIX, nh = BG_H / PIX;
   const px = (cv: HTMLCanvasElement, o: { levels: number; dither: number; alphaDither?: boolean }): HTMLCanvasElement => padCanvas(pixelize(cv, { outW: nw, outH: nh, ...o }), BG_PAD);
-  const rs = rendered.get(key);
+  const [srcVariant, flip] = RENDERED_SOURCE[variant] ?? [variant, false];
+  const base = rendered.get(`${chapter}:${srcVariant}`);
+  const rs = base && flip ? { far: mirrored(base.far), mid: mirrored(base.mid), floor: mirrored(base.floor), near: mirrored(base.near), lights: base.lights.map((l) => ({ ...l, x: BG_W - l.x })) } : base;
   if (rs) {
     // a modelled room: more tones than the painted ones (it carries real lighting), the same pixel grid, dither and depth of field
     const th = CHAPTER_BY_N(chapter).theme;
@@ -319,8 +321,7 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
     near: depthBlur(px(v.near, { levels: 6, dither: 0.6, alphaDither: true }), { all: 1.4 }),
     lights: v.lights, theme: v.theme, variant: v.variant, particles: v.particles,
   };
-  pcache.set(key, layers); porder.push(key);
-  while (porder.length > 6) pcache.delete(porder.shift() as string);
+  if (renderedDone) { pcache.set(key, layers); porder.push(key); while (porder.length > 6) pcache.delete(porder.shift() as string); }
   return layers;
 }
 
@@ -329,20 +330,28 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
 interface RenderedSet { far: HTMLCanvasElement; mid: HTMLCanvasElement; floor: HTMLCanvasElement; near: HTMLCanvasElement; lights: Light[] }
 const rendered = new Map<string, RenderedSet>();
 let renderedLoad: Promise<void> | null = null;
+/** set once the modelled rooms have loaded (or failed to): until then nothing painted is cached, so a late arrival is not shadowed by a painted fallback */
+let renderedDone = false;
+/** which modelled room stands in for each room shape: the hall (mirrored for some shapes, for a second look) or the boss arena */
+const RENDERED_SOURCE: Record<string, [string, boolean]> = {
+  hall: ['hall', false], cavern: ['hall', false], vault: ['hall', false], corridor: ['hall', true], stair: ['hall', true], bridge: ['hall', true], shrine: ['hall', true], arena: ['arena', false],
+};
+const mirrored = (cv: HTMLCanvasElement): HTMLCanvasElement => { const o = makeCanvas(cv.width, cv.height), c = ctx2d(o); c.translate(cv.width, 0); c.scale(-1, 1); c.drawImage(cv, 0, 0); return o; };
 export function loadRenderedBackdrops(): Promise<void> {
   renderedLoad ??= (async () => {
     const base = ((import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './') + 'backdrops/';
     const res = await fetch(base + 'manifest.json');
     if (!res.ok) return;
     const man = (await res.json()) as Record<string, { name: string; lights: Light[] }>;
+    // kept at the pixel grid's size: twenty rooms must not cost 150 MB
     const img = (url: string): Promise<HTMLCanvasElement> => new Promise((ok, fail) => {
-      const im = new Image(); im.onload = () => { const c = makeCanvas(BG_W, BG_H); ctx2d(c).drawImage(im, 0, 0, BG_W, BG_H); ok(c); }; im.onerror = () => fail(new Error(url)); im.src = url;
+      const im = new Image(); im.onload = () => { const c = makeCanvas(BG_W / PIX, BG_H / PIX); const x = ctx2d(c); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, c.width, c.height); ok(c); }; im.onerror = () => fail(new Error(url)); im.src = url;
     });
     for (const [key, e] of Object.entries(man)) {
       const [far, mid, floor, near] = await Promise.all(['far', 'mid', 'floor', 'near'].map((l) => img(`${base}${e.name}-${l}.webp`)));
       rendered.set(key, { far, mid, floor, near, lights: e.lights });
     }
-  })().catch(() => { /* the painted backdrops stay in use */ });
+  })().catch(() => { /* the painted backdrops stay in use */ }).finally(() => { renderedDone = true; });
   return renderedLoad;
 }
 
@@ -363,6 +372,6 @@ export function compositeBackground(chapter: number, variant: string, w = 640, h
   const cv = makeCanvas(w, h); const c = ctx2d(cv);
   c.imageSmoothingEnabled = w < nw; c.imageSmoothingQuality = 'high';
   c.drawImage(nat, 0, 0, w, h);
-  thumbs.set(key, cv);
+  if (renderedDone) thumbs.set(key, cv);
   return cv;
 }
