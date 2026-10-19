@@ -308,8 +308,8 @@ function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
   if (id === 'legolas') {
     if (anim === 'dash') return { ...base, hand: [1, 0], tip: [0, 0], rhand: [-2, 0] };
     if (anim === 'wind' || anim === 'cast') return { ...base, hand: [1, -1], tip: [0, 0], rhand: [anim === 'wind' ? -6 : -4 - n * 2, 0], lean: base.lean };
-    if (anim === 'strike') return { ...base, hand: [2, 0], rhand: [3, 0], tip: [0, 0] };
-    if (anim === 'thrust') return { ...base, hand: [2, -1], rhand: n === 0 ? [-8, -1] : n === 1 ? [3, 0] : [2, 0], tip: [0, 0], lean: n === 0 ? -5 : base.lean };            // draw and loose
+    if (anim === 'strike') return { ...base, hand: [2, 5], rhand: [-1, 4], tip: [0, 0], lean: 7 };                                                                            // a low snap shot from the hip
+    if (anim === 'thrust') return { ...base, hand: [2, n === 0 ? -1 : -4], rhand: n === 0 ? [-8, -1] : n === 1 ? [3, -3] : [2, -4], tip: [0, 0], lean: n === 0 ? -5 : -2 };    // draw, then loose a high aimed shot
     if (anim === 'cast2') return { ...base, hand: [2, -6], rhand: n === 0 ? [-6, -5] : [2, -6], tip: [0, 0], lean: n === 0 ? -4 : -1 };    // a high volley, leaning back
     return { ...base, tip: [0, 0], hand: base.hand ?? [0, 0], rhand: anim === 'win' ? [2, -10] : base.rhand };
   }
@@ -319,12 +319,17 @@ function poseFor(id: HeroId, anim: HeroAnim, n: number): Pose {
     if (anim === 'strike' || anim === 'cast') return { ...base, hand: [3, -7 - n * 2], tip: [3, -6 - n * 2], open: true, rhand: [2, -8] };
     if (anim === 'win') return { ...base, hand: [2, -10], tip: [1, -9], open: true };
     if (anim === 'thrust') return { ...base, hand: [n === 0 ? -3 : 3, -2], tip: [n === 0 ? -4 : 2, -3], open: n > 0, rhand: [n === 0 ? 1 : 4, -2] };    // the staff thrust forward
-    if (anim === 'cast2') return { ...base, hand: [n === 0 ? -2 : 3, -5], tip: [n === 0 ? -2 : 2, -6], open: true, rhand: [n === 0 ? -3 : 5, -4] };      // a sweeping gesture
+    if (anim === 'cast2') return { ...base, hand: [n === 0 ? -2 : 3, -3], tip: [n === 0 ? -2 : 3, -2], open: true, rhand: [n === 0 ? -3 : 3, -9] };      // the staff slants forward, the other hand lifted
     return { ...base, tip: [0, 0], hand: base.hand };
   }
+  if (id === 'aragorn' || id === 'boromir') {
+    if (anim === 'strike') return { ...base, hand: [3, 4], tip: [6, 52] };                                                       // a downward chop
+    if (anim === 'thrust') return n === 0 ? base : { ...base, hand: [4, -1], tip: [10, 14] };                                    // a rising stab
+  }
+  if (id === 'sam' && (anim === 'strike' || anim === 'thrust' || anim === 'cast' || anim === 'cast2')) return { ...base, tip: [Math.min(base.tip?.[0] ?? 0, 4), base.tip?.[1] ?? 0], hand: [Math.min(base.hand?.[0] ?? 0, 4), base.hand?.[1] ?? 0] };   // the pan stays in the cell
   if (id === 'frodo' && anim === 'cast') return { ...base, hand: [2, -6], tip: [4, -10] };
   if (id === 'gimli' && (anim === 'thrust' || anim === 'cast' || anim === 'cast2')) return { ...base, hand: [Math.min(base.hand?.[0] ?? 0, 4), base.hand?.[1] ?? 0], tip: [Math.min(base.tip?.[0] ?? 0, 2), anim === 'thrust' ? 6 : base.tip?.[1] ?? 0] };   // the axe head must not leave the cell
-  if ((id === 'sam' || id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? (n ? [2, 28] : [3, 24]) : (n ? [8, 18] : [12, 14]) };
+  if ((id === 'frodo' || id === 'gimli') && anim === 'strike') return { ...base, tip: id === 'gimli' ? (n ? [2, 28] : [3, 24]) : (n ? [8, 18] : [12, 14]) };
   return base;
 }
 
