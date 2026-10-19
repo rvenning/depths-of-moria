@@ -26,10 +26,32 @@ export function mountGallery(root: HTMLElement): void {
     }
     return;
   }
+  if (arg === 'keys') {      // #gallery/keys: eight key frames of every hero at 3x, one hero per row
+    for (const hero of HERO_LIST) {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:4px;background:#262033;margin:0 0 6px;align-items:flex-end';
+      for (const [an, n] of [['idle', 0], ['wind', 0], ['strike', 1], ['thrust', 2], ['cast', 1], ['cast2', 2], ['hurt', 0], ['win', 0]] as [HeroAnim, number][]) {
+        const cv = heroFrame(hero.id, an, n).color; const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d')?.drawImage(cv, 0, 0);
+        c.style.cssText = 'width:' + cv.width * 3 + 'px;height:' + cv.height * 3 + 'px;image-rendering:pixelated'; row.appendChild(c);
+      }
+      root.appendChild(row);
+    }
+    return;
+  }
+  if (arg === 'pose') {      // #gallery/pose/<hero>: every frame of one hero at 3x, labelled, for checking faces and hands
+    const id = location.hash.split('/')[2] ?? 'aragorn';
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;background:#262033;padding:4px';
+    for (const a of Object.keys(HERO_ANIMS) as HeroAnim[]) for (let n = 0; n < HERO_ANIMS[a].length; n++) {
+      const cv = heroFrame(id as never, a, n).color; const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d')?.drawImage(cv, 0, 0);
+      c.style.cssText = 'width:' + cv.width * 3 + 'px;height:' + cv.height * 3 + 'px;image-rendering:pixelated';
+      const d = document.createElement('div'); d.style.cssText = 'text-align:center;color:#ccc;font:11px sans-serif'; d.appendChild(c); d.appendChild(document.createTextNode(a + n)); row.appendChild(d);
+    }
+    root.appendChild(row);
+    return;
+  }
   if (arg === 'anim' || arg === 'atk') {
     const shown = (Object.keys(HERO_ANIMS) as HeroAnim[]).filter((a) => arg === 'anim' || ['dash', 'strike', 'thrust', 'cast', 'cast2'].includes(a));   // atk: the attack animations only
     for (const hero of HERO_LIST) {
-      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:2px;align-items:flex-end;margin:2px 0;background:#262033';
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px;align-items:flex-end;margin:2px 0 10px;background:#262033';
       for (const a of shown) for (let n = 0; n < HERO_ANIMS[a].length; n++) {
         const cv = heroFrame(hero.id, a, n).color; const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d')?.drawImage(cv, 0, 0);
         c.style.cssText = 'width:' + cv.width * 2 + 'px;height:' + cv.height * 2 + 'px;image-rendering:pixelated'; c.title = hero.id + ' ' + a + n; row.appendChild(c);

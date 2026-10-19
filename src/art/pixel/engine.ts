@@ -40,11 +40,11 @@ export function makeRamp(hex: string, o: RampOpts = {}): RGB[] {
   return out;
 }
 
-export interface Mat { name: string; ramp: RGB[]; dither: number; emissive: boolean }
+export interface Mat { name: string; ramp: RGB[]; dither: number; emissive: boolean; /** metals: the brightest tones glint */ shiny: boolean }
 export const MATS: Mat[] = [];
 export const MAT_ID: Record<string, number> = {};
-export function def(name: string, hex: string, o: RampOpts & { dither?: number; emissive?: boolean } = {}): void {
-  MAT_ID[name] = MATS.length; MATS.push({ name, ramp: makeRamp(hex, o), dither: o.dither ?? 0.22, emissive: !!o.emissive });
+export function def(name: string, hex: string, o: RampOpts & { dither?: number; emissive?: boolean; shiny?: boolean } = {}): void {
+  MAT_ID[name] = MATS.length; MATS.push({ name, ramp: makeRamp(hex, o), dither: o.dither ?? 0.22, emissive: !!o.emissive, shiny: !!o.shiny });
 }
 export const mixc = (a: RGB, b: RGB, t: number): RGB => [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -155,7 +155,8 @@ export class Sprite {
     if (!o.line) { this.mat[i] = -1; this.part[i] = this.n; }
     return this;
   }
-  finish(): PixImg {
+  /** `rim`: the edges facing the light step lighter along the material's ramp and the far edges step darker; `contrast` stretches the shading around mid-tone */
+  finish(fo: { rim?: boolean; contrast?: number } = {}): PixImg {
     const { w, h } = this, out = new Uint8ClampedArray(w * h * 4);
     const filled = (i: number): boolean => this.mat[i] >= 0 || this.dir[i] >= 0;
     const sel = new Uint8Array(w * h), outl: (RGB | undefined)[] = new Array(w * h);
@@ -179,7 +180,19 @@ export class Sprite {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x, o = i * 4; let c: RGB | undefined;
       if (this.dir[i] >= 0) c = [(this.dir[i] >> 16) & 255, (this.dir[i] >> 8) & 255, this.dir[i] & 255];
-      else if (this.mat[i] >= 0) { const m = MATS[this.mat[i]]; c = sel[i] ? mixc(m.ramp[0], OUTLINE, 0.25) : shade(m.name, this.p[i], x, y); }
+      else if (this.mat[i] >= 0) {
+        const m = MATS[this.mat[i]]; const pp = fo.contrast ? clamp(2.1 + (this.p[i] - 2.1) * fo.contrast, 0, 4) : this.p[i];
+        c = sel[i] ? mixc(m.ramp[0], OUTLINE, 0.25) : shade(m.name, pp, x, y);
+        if (!sel[i] && !m.emissive) {
+          if (m.shiny && pp > 3.5) c = mixc(c, [255, 255, 255], 0.5);
+          if (fo.rim) {
+            const f = (dx: number, dy: number): boolean => { const X = x + dx, Y = y + dy; return X >= 0 && Y >= 0 && X < w && Y < h && filled(Y * w + X); };
+            // the rim moves along the material's own ramp (a step lighter toward the light, a step darker away), so it adds no new colours
+            if (!f(-1, 0) || !f(0, -1) || !f(-1, -1)) c = shade(m.name, pp + 1.1, x, y);
+            else if (!f(1, 0) || !f(0, 1) || !f(1, 1)) c = shade(m.name, pp - 0.7, x, y);
+          }
+        }
+      }
       else if (outl[i]) c = outl[i];
       if (c) { out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255; }
     }
