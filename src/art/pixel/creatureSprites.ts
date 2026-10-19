@@ -451,3 +451,49 @@ export function creatureCanvases(d: EnemyDef, n: number): { color: HTMLCanvasEle
   const img = creatureImage(d, n);
   return { color: toCanvas(img), normal: toCanvas(img, img.normal) };
 }
+
+// ---------------------------------------------------------------- walk cycle
+/** how each family moves: on legs (the lower part of the sprite swings), floating (a hover bob) or slithering (a wave along the body) */
+export type WalkStyle = 'legs' | 'float' | 'slither';
+export const WALK_STYLE: Record<CreatureFamily, WalkStyle> = {
+  goblin: 'legs', archer: 'legs', orc: 'legs', warg: 'legs', troll: 'legs', guardian: 'legs', golem: 'legs', warden: 'legs', balrog: 'legs', drake: 'legs', fiend: 'legs', spider: 'legs',
+  bat: 'float', wraith: 'float', wisp: 'float', shade: 'float', horror: 'float', serpent: 'slither',
+};
+export const WALK_FRAMES = 4;
+
+/**
+ * Frame `n` (0-3) of a four-frame walk cycle made from a finished sprite (pure pixels, with its normal map moved the same way):
+ * legs - the upper body bobs up on the passing frames while the two halves of the lower body swing opposite ways (the feet most) and the
+ * swinging foot lifts; float - a two-pixel hover and sway; slither - a sine wave runs along the body.
+ */
+export function walkImage(img: PixImg, style: WalkStyle, n: number): PixImg {
+  const { w, h } = img, out = new Uint8ClampedArray(w * h * 4), nrm = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) { nrm[i * 4] = 128; nrm[i * 4 + 1] = 128; nrm[i * 4 + 2] = 255; }
+  // the opaque bounds: where the middle is, and where the feet are
+  let x0 = w, x1 = -1, y1 = -1, y0 = h;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (img.rgba[(y * w + x) * 4 + 3]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  if (x1 < 0) return { w, h, rgba: out, normal: nrm };
+  const xm = (x0 + x1) / 2, cut = Math.round(y0 + (y1 - y0) * 0.66), amp = Math.max(2, Math.round((x1 - x0) / 34)), k = ((n % 4) + 4) % 4;
+  const swingL = [1, 0, -1, 0][k], swingR = [-1, 0, 1, 0][k], liftL = [0, 1, 0, 0][k], liftR = [0, 0, 0, 1][k], bob = [0, -1, 0, -1][k];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let sx = x, sy = y;
+    if (style === 'legs') {
+      if (y < cut) sy = Math.max(0, Math.min(cut - 1, y - bob));         // the upper body bobs; its last row stretches so no seam opens
+      else {
+        const r = (y - cut) / Math.max(1, y1 - cut), left = x < xm;
+        sx = x - Math.round((left ? swingL : swingR) * amp * r);
+        sy = Math.min(h - 1, y + (r > 0.45 ? (left ? liftL : liftR) * Math.max(1, Math.round(amp / 2)) : 0));
+      }
+    } else if (style === 'float') {
+      sy = y - [0, -1, -2, -1][k]; sx = x - [0, 1, 0, -1][k];
+    } else {
+      sy = y - Math.round(Math.sin(((x - x0) / Math.max(1, x1 - x0)) * Math.PI * 3 + k * (Math.PI / 2)) * 2);
+    }
+    if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+    const si = (sy * w + sx) * 4, di = (y * w + x) * 4;
+    if (!img.rgba[si + 3]) continue;
+    out[di] = img.rgba[si]; out[di + 1] = img.rgba[si + 1]; out[di + 2] = img.rgba[si + 2]; out[di + 3] = 255;
+    if (img.normal) { nrm[di] = img.normal[si]; nrm[di + 1] = img.normal[si + 1]; nrm[di + 2] = img.normal[si + 2]; nrm[di + 3] = 255; }
+  }
+  return { w, h, rgba: out, normal: nrm };
+}

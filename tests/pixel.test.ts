@@ -83,3 +83,19 @@ describe('hero attack animations', () => {
     });
   }
 });
+
+import { WALK_FRAMES, WALK_STYLE, walkImage } from '../src/art/pixel/creatureSprites.ts';
+describe('the enemy walk cycle', () => {
+  it('gives every enemy four distinct frames that keep the creature whole and on its feet', () => {
+    const count = (a: Uint8ClampedArray): number => { let n = 0; for (let i = 3; i < a.length; i += 4) if (a[i]) n++; return n; };
+    const lowest = (img: { w: number; h: number; rgba: Uint8ClampedArray }): number => { let m = 0; for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) if (img.rgba[(y * img.w + x) * 4 + 3]) m = Math.max(m, y); return m; };
+    const differ = (a: Uint8ClampedArray, b: Uint8ClampedArray): number => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 3] !== b[i + 3]) n++; return n; };
+    for (const d of ENEMY_LIST) {
+      const base = creatureImage(d, Math.round(85 * (d.scale ?? 1) * (d.tier === 'boss' ? 1.05 : 1)));
+      const frames = Array.from({ length: WALK_FRAMES }, (_, i) => walkImage(base, WALK_STYLE[d.family], i));
+      const n0 = count(base.rgba);
+      for (const f of frames) { expect(count(f.rgba), d.id).toBeGreaterThan(n0 * 0.85); expect(count(f.rgba), d.id).toBeLessThan(n0 * 1.15); expect(lowest(f), d.id).toBeGreaterThanOrEqual(lowest(base) - 3); }
+      for (let i = 0; i < WALK_FRAMES; i++) for (let j = i + 1; j < WALK_FRAMES; j++) expect(differ(frames[i].rgba, frames[j].rgba), `${d.id} ${i} vs ${j}`).toBeGreaterThan(8);
+    }
+  });
+});

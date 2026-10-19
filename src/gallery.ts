@@ -5,6 +5,7 @@ import { paintHero } from './art/heroes.ts';
 import { FX_KINDS, previewFrames } from './art/pixel/fxFrames.ts';
 import { HERO_ANIMS, heroFrame, type HeroAnim } from './art/pixel/heroSprites.ts';
 import { compositeBackground, BG_VARIANT_KEYS } from './art/backgrounds.ts';
+import { paintCreatureWalk } from './art/creatures.ts';
 
 /** #gallery, #gallery/1 … #gallery/5 : art review pages */
 export function mountGallery(root: HTMLElement): void {
@@ -22,6 +23,17 @@ export function mountGallery(root: HTMLElement): void {
       const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;align-items:flex-end;margin:4px 0;color:#fff';
       const l = document.createElement('div'); l.textContent = k; l.style.width = '60px'; row.appendChild(l);
       for (const cv of previewFrames(k)) { cv.style.cssText = 'width:' + cv.width * 3 + 'px;height:' + cv.height * 3 + 'px;image-rendering:pixelated;background:#2a2036'; row.appendChild(cv); }
+      root.appendChild(row);
+    }
+    return;
+  }
+  if (arg === 'walk') {      // #gallery/walk: the four walk frames of one enemy per family
+    const seen = new Set<string>();
+    for (const en of ENEMY_LIST) {
+      if (seen.has(en.family)) continue; seen.add(en.family);
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:4px;background:#262033;margin:0 0 4px;align-items:flex-end;color:#ccc;font:11px sans-serif';
+      const l = document.createElement('div'); l.style.width = '70px'; l.textContent = en.family; row.appendChild(l);
+      for (let i = 0; i < 4; i++) { const cv = paintCreatureWalk(en, i).color; const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d')?.drawImage(cv, 0, 0); c.style.cssText = 'width:' + cv.width * 1.5 + 'px;height:' + cv.height * 1.5 + 'px;image-rendering:pixelated'; row.appendChild(c); }
       root.appendChild(row);
     }
     return;

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BG_H, BG_PAD, BG_W, HORIZON, PIX, type BgLayers } from '../art/backgrounds.ts';
-import { CREATURE_FOOT, paintCreature, paintCreatureNormal } from '../art/creatures.ts';
+import { CREATURE_FOOT, paintCreature, paintCreatureNormal, paintCreatureWalk } from '../art/creatures.ts';
 import { HERO_FOOT, HERO_H } from '../art/heroes.ts';
 import { HERO_ANIMS, heroFrame, type HeroAnim } from '../art/pixel/heroSprites.ts';
 import { breathe, leanTop, normalMapOf } from '../art/pixel/pixelize.ts';
@@ -352,11 +352,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** an enemy's frames: as painted, breathing in, winding up, lunging (they face left, so forward is -x) and flinching */
-  private enemyTex(id: string, v: 'idle0' | 'idle1' | 'wind' | 'strike' | 'hurt' | 'step0' | 'step1'): string {
+  private enemyTex(id: string, v: 'idle0' | 'idle1' | 'wind' | 'strike' | 'hurt' | 'walk0' | 'walk1' | 'walk2' | 'walk3'): string {
     const key = v === 'idle0' ? `e:${id}` : `e:${id}:${v}`;
     if (!this.textures.exists(key)) {
-      const def = ENEMIES[id], base = paintCreature(def);
-      const cv = v === 'idle0' ? base : v === 'idle1' ? breathe(base) : v === 'wind' ? leanTop(base, 3, -1) : v === 'strike' ? leanTop(base, -5, 1) : v === 'step0' ? leanTop(base, -2, -1) : v === 'step1' ? breathe(leanTop(base, -3, 0)) : leanTop(base, 4, 0);
+      const def = ENEMIES[id];
+      if (v.startsWith('walk')) { const w = paintCreatureWalk(def, Number(v[4])); const t = this.textures.addCanvas(key, w.color); t?.setDataSource(w.normal); return key; }
+      const base = paintCreature(def);
+      const cv = v === 'idle0' ? base : v === 'idle1' ? breathe(base) : v === 'wind' ? leanTop(base, 3, -1) : v === 'strike' ? leanTop(base, -5, 1) : leanTop(base, 4, 0);
       const t = this.textures.addCanvas(key, cv); t?.setDataSource(v === 'idle0' ? paintCreatureNormal(def) : normalMapOf(cv, 1.4));
     }
     return key;
@@ -384,7 +386,7 @@ export class BattleScene extends Phaser.Scene {
       key = this.heroTex(n.view.heroId, n.anim, i);
     } else {
       if (n.anim !== 'idle' && now > n.hold) n.anim = 'idle';
-      const pose = n.anim === 'wind' || n.anim === 'strike' || n.anim === 'hurt' ? n.anim : n.anim === 'dash' ? (Math.floor(now / 85) % 2 ? 'step1' : 'step0') : null;   // a dash is a two-frame walk
+      const pose = n.anim === 'wind' || n.anim === 'strike' || n.anim === 'hurt' ? n.anim : n.anim === 'dash' ? (`walk${Math.floor(now / 70) % 4}` as 'walk0') : null;   // a dash is the four-frame walk cycle
       key = this.enemyTex(n.view.id, pose ?? (this.reduced ? 'idle0' : [0, 1, 1, 0][Math.floor((now + n.phase) / 340) % 4] ? 'idle1' : 'idle0'));
     }
     if (key !== n.texKey) { n.sprite.setTexture(key); n.texKey = key; }
@@ -753,7 +755,7 @@ export class BattleScene extends Phaser.Scene {
       await this.tween({ targets: a.c, x: tx, y: ty, duration: 170, ease: 'quad.in' });
       // heroes alternate between two attacks: the downward chop and the level thrust
       this.setAnim(a, a.side === 'hero' && a.swings++ % 2 ? 'thrust' : 'strike', 340);
-      return async () => { await this.tween({ targets: a.c, x: ox, y: oy, duration: 170, ease: 'quad.out' }); };
+      return async () => { if (a.side === 'enemy') this.setAnim(a, 'dash', 190); await this.tween({ targets: a.c, x: ox, y: oy, duration: 170, ease: 'quad.out' }); };
     }
     // cast / shoot pose: a small hop and glow
     const col = this.fxColor(fx);
