@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Moria score audition</title>
+<style>
+  :root { --bg: #f6f3ee; --fg: #1d1a22; --card: #fff; --line: #ddd5c8; --dim: #6b6470; --accent: #7a4cd8; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14101c; --fg: #ece6f4; --card: #1e1830; --line: #35294f; --dim: #a79cb8; --accent: #b79bff; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p { color: var(--dim); margin: 4px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .ch { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .ch h2 { font-size: 1rem; margin: 0 0 6px; }
+  .ch h2 small { color: var(--dim); font-weight: 400; }
+  .row { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 6px; margin: 4px 0; font-size: .85rem; color: var(--dim); }
+  audio { width: 100%; height: 34px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Moria score audition</h1>
+  <p>The 40 rendered tracks (ten chapters × title, camp, battle, boss). Each loops, so leave one playing as long as you like. These are the sampled orchestral versions; in the game, <em>Settings → Sound → Orchestral score</em> switches between them and the old synth. <a href="./">Back to the game</a>.</p>
+  <div class="grid" id="grid"></div>
+</main>
+<script>
+  var NAMES = ['The West-gate', 'Echoing Galleries', 'Abandoned Forges', 'The Endless Stair', 'The Great Halls', 'The Flooded Deeps', 'The Shadow Archives', 'The Black Chasm', 'The Chamber of Flame', 'The Bridge of Khazad-dûm'];
+  var MOODS = ['title', 'camp', 'battle', 'boss'];
+  var grid = document.getElementById('grid');
+  NAMES.forEach(function (name, i) {
+    var n = i + 1, card = document.createElement('div'); card.className = 'ch';
+    card.innerHTML = '<h2>' + n + '. ' + name + '</h2>';
+    MOODS.forEach(function (m) {
+      var row = document.createElement('div'); row.className = 'row';
+      var a = document.createElement('audio'); a.controls = true; a.loop = true; a.preload = 'none'; a.src = 'music/c' + n + '-' + m + '.mp3';
+      a.addEventListener('play', function () { document.querySelectorAll('audio').forEach(function (o) { if (o !== a) o.pause(); }); });
+      row.innerHTML = '<span>' + m + '</span>'; row.appendChild(a); card.appendChild(row);
+    });
+    grid.appendChild(card);
+  });
+</script>
+</body>
+</html>
