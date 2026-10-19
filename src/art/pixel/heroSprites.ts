@@ -51,13 +51,13 @@ function applyStride(S: Sprite, d: number): void {
 
 /** swing the part of a cloak below y0 sideways, more the lower it hangs */
 const sway = (pts: Pt[], amt: number, y0: number): Pt[] => pts.map(([x, y]) => [x + (y > y0 ? (amt * (y - y0)) / (82 - y0) : 0), y] as Pt);
+/** a three-quarter face: a 2x3 near eye with a catch-light, and a second, 2x3 far eye two pixels along, so both always read at sprite scale */
 const eyes = (S: Sprite, x: number, y: number, blink: boolean | undefined, iris = EYE): void => {
-  if (blink) { S.dot(x, y + 1, iris); S.dot(x + 1, y + 1, iris); S.dot(x + 5, y + 1, iris); return; }
-  S.dot(x, y, iris); S.dot(x + 1, y, iris); S.dot(x, y + 1, iris); S.dot(x + 1, y + 1, iris); S.dot(x, y + 2, iris); S.dot(x + 1, y + 2, iris);
-  S.dot(x, y, '#ffffff');
-  S.dot(x + 5, y, iris); S.dot(x + 5, y + 1, iris); S.dot(x + 5, y + 2, iris);
+  if (blink) { for (const dx of [0, 1, 5, 6]) S.dot(x + dx, y + 1, iris); return; }
+  for (const dx of [0, 1, 5, 6]) for (const dy of [0, 1, 2]) S.dot(x + dx, y + dy, iris);
+  S.dot(x, y, '#ffffff'); S.dot(x + 5, y, '#e9e4ee');
 };
-const brow = (S: Sprite, x: number, y: number, c: string): void => { for (const dx of [0, 1, 2]) S.dot(x + dx, y, c); for (const dx of [5, 6]) S.dot(x + dx, y, c); };
+const brow = (S: Sprite, x: number, y: number, c: string): void => { for (const dx of [0, 1, 2]) S.dot(x + dx, y, c); for (const dx of [5, 6, 7]) S.dot(x + dx, y, c); };
 /** the offsets a pose resolves to */
 const rig = (P: Pose): { up: number; lean: number; cape: number; h: Pt; t: Pt; r: Pt; hd: Pt } => ({ up: P.up ?? 0, lean: P.lean ?? 0, cape: P.cape ?? 0, h: P.hand ?? [0, 0], t: P.tip ?? [0, 0], r: P.rhand ?? [0, 0], hd: P.head ?? [0, 0] });
 const mid = (a: Pt, b: Pt, k = 0.5): Pt => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
@@ -93,6 +93,12 @@ function aragorn(P: Pose): PixImg {
   for (let x = 32; x <= 41; x += 2) S.dot(x, 25, '#a87455');
   return S.finish();
 }
+/** both eyes show, either side of the helmet's nasal bar (x 36–37): a 2×3 near eye and a slimmer far eye, each with a catch-light */
+function gimliEyes(S: Sprite, blink: boolean | undefined): void {
+  if (blink) { for (const x of [32, 33, 39, 40]) S.dot(x, 41, EYE); return; }
+  for (const [x, w] of [[32, 2], [39, 2]] as const) for (let dx = 0; dx < w; dx++) for (const y of [40, 41, 42]) S.dot(x + dx, y, EYE);
+  S.dot(32, 40, '#ffffff'); S.dot(39, 40, '#ffffff');
+}
 function gimli(P: Pose): PixImg {
   const { up, lean, h, t, r, hd } = rig(P);
   const S = new Sprite(72, 92).at(0, 8);
@@ -114,9 +120,9 @@ function gimli(P: Pose): PixImg {
   S.ell(33, 40, 10, 9, 'skin', { g: 'head', bevel: 5 });
   S.poly([[23, 44], [43, 44], [47, 54], [43, 64], [33, 70], [24, 64], [19, 54]], 'hairOrange', { g: 'beard', bevel: 6, tex: 0.7, fold: { amp: 0.35, period: 4, angle: 1.5 } });
   S.poly([[22, 38], [24, 30], [33, 26], [42, 30], [44, 38]], 'steel', { g: 'helm', bevel: 4 });
-  S.rect(21, 36, 24, 4, 'steelDark', { g: 'helm', flat: true, tone: 2.2 }); S.rect(35, 38, 3, 9, 'steel', { g: 'helm', bevel: 1.5 });
+  S.rect(21, 36, 24, 4, 'steelDark', { g: 'helm', flat: true, tone: 2.2 }); S.rect(36, 38, 2, 9, 'steel', { g: 'helm', bevel: 1 });   // the nasal bar sits between the eyes, not over one of them
   S.poly([[31, 27], [34, 17], [38, 27]], 'red', { g: 'crest' });
-  eyes(S, 36, 40, P.blink); brow(S, 35, 39, '#5a3a1e'); S.dot(40, 46, '#d98a62'); S.dot(41, 46, '#d98a62');
+  gimliEyes(S, P.blink); brow(S, 31, 39, '#5a3a1e'); for (const x of [38, 39, 40]) S.dot(x, 39, '#5a3a1e'); S.dot(40, 46, '#d98a62'); S.dot(41, 46, '#d98a62');
   return S.finish();
 }
 function frodo(P: Pose): PixImg {
