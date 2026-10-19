@@ -79,3 +79,10 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [x] The sampled score was auditioned by the owner (2026-10-19), who confirmed it sounds good and should stay the default. It is a free GM soundfont at 96 kbps, so a good general-MIDI orchestra rather than a recorded one. `/listen.html` on the live site has a player for all 40 tracks.
 - [x] **Modelled backdrops** (Blender 4.5): all ten chapters, each with a hall and a boss arena, four lit layers each, with per-chapter palette, light and features (see ASSETS.md). Checked in the real battle scene at 52–56 fps (chapters 1, 5, 6 and 10 sampled; same range as before). Room shapes reuse the hall (some mirrored), so there are two looks per chapter plus the arena, not eight; the painted rooms remain as the fallback.
 - [x] **Animation**: every hero has two distinct melee attacks (`strike` the downward chop, `thrust` the level lunge, with per-hero variants: Legolas draws and looses, Gandalf thrusts the staff) and two distinct casts (`cast`, `cast2`); battle alternates them. A unit test asserts the pairs are visibly different for all 7 heroes; `#gallery/atk` is the contact sheet. Enemies got a two-frame step cycle for their advance.
+
+## Enemy art pass (2026-10-19)
+- [x] Rim light and a contrast stretch for every enemy (the same engine pass as the heroes; it moves along each material's ramp, so no new colours).
+- [x] The Tunnel Rat is a real rat (pointed snout, big round ears, whiskers, pink tail, two long teeth) via a `rat` feature and its own painter; it no longer shares the warg body.
+- [x] The wargs (Cinder Hound, Stair Warg, Warg Hunter, Packleader, Flame Hound) are lean wolves: bushy tail, tall pointed ears, open jaws with fangs.
+- [x] The six goblins no longer share one silhouette: a fat crowned Grub, a spiked and war-painted Warchief with trophy skulls, a caped and breastplated Captain, a lamp-lit Tunneler, a hooded, scarfed Ambusher with two daggers.
+- Still shared: orcs, trolls and the stone constructs reuse one body plan per family (differing in gear, scale and colour); the flying and ghost families are unchanged.

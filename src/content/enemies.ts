@@ -30,7 +30,7 @@ const list: EnemyDef[] = [
   E('goblin-skirmisher', 'Goblin Skirmisher', 1, 'normal', 'goblin', 'front', [0.65, 0.85, 0.5, 0.4, 0.4, 108], sk('e-strike:3', 'e-lunge:1'), ['goblin'],
     ['#6f8a3c', '#4c5f26', '#ffd24a', '#5a4632'], 'Cheap, quick and cruel. They fight in packs and run when the pack is gone.', { features: ['ears', 'dagger'] }),
   E('tunnel-rat', 'Tunnel Rat', 1, 'normal', 'warg', 'front', [0.5, 0.8, 0.4, 0.3, 0.3, 118], sk('e-bite:3', 'e-leap:1'), ['beast'],
-    ['#6a5a4a', '#4a3c30', '#ff6a4a', '#3a2a22'], 'Big as a dog, hungry as two. They infest the gate tunnels.', { scale: 0.8, features: ['tail'] }),
+    ['#6a5a4a', '#4a3c30', '#ff6a4a', '#3a2a22'], 'Big as a dog, hungry as two. They infest the gate tunnels.', { scale: 0.8, features: ['rat'] }),
   E('goblin-slinger', 'Goblin Slinger', 1, 'normal', 'archer', 'back', [0.5, 0.9, 0.4, 0.4, 0.4, 100], sk('e-sling:3', 'e-blind:1'), ['goblin'],
     ['#7a8f45', '#566a2a', '#ffd24a', '#6a5030'], 'Stays behind the pack and throws whatever is to hand.', { features: ['sling'] }),
   E('rotting-sentry', 'Rotting Sentry', 1, 'normal', 'guardian', 'front', [1.3, 0.8, 1.1, 0.4, 0.8, 80], sk('e-strike:3', 'e-bash:1'), ['undead'],
