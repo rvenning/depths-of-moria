@@ -4,8 +4,8 @@ import { backend, exportSave, importSave } from '../../persistence/db.ts';
 import { Icon, Modal, Section } from '../components.tsx';
 import { setNaming, t } from '../names.ts';
 import { store, useGame } from '../store.ts';
+import { VersionBadge } from '../VersionBadge.tsx';
 
-declare const __BUILD__: { version: string; sha: string; built: string };
 
 function Slider({ label, value, onChange, min = 0, max = 1, step = 0.05, fmt = (v: number) => `${Math.round(v * 100)}%` }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; fmt?: (v: number) => string }) {
   return (
@@ -83,7 +83,8 @@ export function SettingsScreen() {
           </div>
         </Section>
         <Section title="About">
-          <div className="small dim">Version {__BUILD__.version} · build {__BUILD__.sha} · save v{s.v}</div>
+          <div className="small dim">Save v{s.v}</div>
+          <VersionBadge />
           <div className="row" style={{ marginTop: 6 }}>
             <button className="btn small" onClick={() => store.go('about')}><Icon k="info" /> Credits &amp; rights</button>
             <button className="btn small" onClick={() => store.go('title')}>Title screen</button>

@@ -9,11 +9,11 @@ import { BAL, levelCap, xpToNext } from '../src/core/balance.ts';
 import { descendAge, descentPreview, startExpedition, retreat, bankExpedition, enterFloor } from '../src/core/expedition.ts';
 import { enemyStats, planFloor } from '../src/core/floors.ts';
 import {
-  autoEquip, buyTalent, canBuyTalent, equip, grantXp, newGame, respecTalents, salvage, talentPoints, unlockHero, upgradeItem, ascendItem, canEquip, forgeUnlocked, upgradeCostFor,
+  autoEquip, autoEquipAll, buyTalent, canBuyTalent, equip, grantXp, newGame, respecTalents, salvage, talentPoints, unlockHero, upgradeItem, ascendItem, canEquip, forgeUnlocked, upgradeCostFor,
 } from '../src/core/game.ts';
 import { makeItem, rollRarity } from '../src/core/loot.ts';
 import { Rng } from '../src/core/rng.ts';
-import { computeHero, itemStat } from '../src/core/stats.ts';
+import { computeHero, itemScore, itemStat } from '../src/core/stats.ts';
 import { activeCombos, buildSetup, featureUnlocked, formation } from '../src/core/party.ts';
 import { Battle } from '../src/core/battle/engine.ts';
 import { getItem } from '../src/core/game.ts';
@@ -143,6 +143,39 @@ describe('heroes, talents and gear', () => {
     autoEquip(s, 'aragorn');
     const p1 = computeHero(s, 'aragorn').stats;
     expect(p1.atk + p1.hp / 10).toBeGreaterThanOrEqual(p0.atk + p0.hp / 10);
+  });
+});
+
+describe('auto-equip fills both accessory slots', () => {
+  const accs = ITEM_LIST.filter((i) => i.slot === 'accessory' && !i.boss).slice(0, 4);
+  const give = (s: ReturnType<typeof newGame>, n: number) => accs.slice(0, n).map((tpl, i) => { const it = makeItem(s, new Rng(40 + i), { floor: 120, tier: tpl.tier, rarity: 'rare', tpl: tpl.id }); s.inventory.push(it); return it; });
+  it('puts two accessories on a hero with none', () => {
+    const s = newGame(3); give(s, 3);
+    autoEquip(s, 'aragorn');
+    expect(s.heroes.aragorn.equip.accessory1).not.toBeNull(); expect(s.heroes.aragorn.equip.accessory2).not.toBeNull();
+    expect(s.heroes.aragorn.equip.accessory1).not.toBe(s.heroes.aragorn.equip.accessory2);
+  });
+  it('adds a second accessory to a hero who already wears one (it used to shuffle the first into the other slot)', () => {
+    const s = newGame(3); const items = give(s, 3);
+    const best = [...items].sort((x, y) => itemScore(y, 'phys') - itemScore(x, 'phys'))[0];
+    equip(s, 'aragorn', best.uid, 'accessory1');
+    autoEquip(s, 'aragorn');
+    const e = s.heroes.aragorn.equip;
+    expect(e.accessory1).toBe(best.uid);              // the best piece stays where it was
+    expect(e.accessory2).not.toBeNull(); expect(e.accessory2).not.toBe(best.uid);
+  });
+  it('keeps a hero\'s two good accessories instead of dropping one when they swap slots', () => {
+    const s = newGame(3); const items = give(s, 2);
+    const [lo, hi] = [...items].sort((x, y) => itemScore(x, 'phys') - itemScore(y, 'phys'));
+    equip(s, 'aragorn', hi.uid, 'accessory2'); equip(s, 'aragorn', lo.uid, 'accessory1');
+    autoEquip(s, 'aragorn');
+    const e = s.heroes.aragorn.equip;
+    expect([e.accessory1, e.accessory2].sort()).toEqual([hi.uid, lo.uid].sort());
+  });
+  it('autoEquipAll hands out accessories two per hero while there are enough', () => {
+    const s = newGame(3); unlockHero(s, 'gimli'); give(s, 4);
+    autoEquipAll(s);
+    for (const h of ['aragorn', 'gimli'] as const) { expect(s.heroes[h].equip.accessory1).not.toBeNull(); expect(s.heroes[h].equip.accessory2).not.toBeNull(); }
   });
 });
 

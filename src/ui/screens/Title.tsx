@@ -5,6 +5,7 @@ import { Icon, Modal } from '../components.tsx';
 import { t, setNaming } from '../names.ts';
 import { store, useStore } from '../store.ts';
 import { sfx } from '../../audio/audio.ts';
+import { VersionBadge } from '../VersionBadge.tsx';
 
 export function TitleScreen() {
   const st = useStore();
@@ -41,6 +42,7 @@ export function TitleScreen() {
           </div>
         </div>
         <div className="tiny faint" style={{ maxWidth: '34rem' }}>A private fan-game concept. Not affiliated with or endorsed by any rights-holder. Not for distribution — see Credits &amp; rights.</div>
+        <VersionBadge />
       </div>
       {confirmNew && (
         <Modal label="Start a new game" onClose={() => setConfirmNew(false)}>

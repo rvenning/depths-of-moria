@@ -214,12 +214,17 @@ export function salvageBelow(state: GameState, upTo: Rarity): number {
 }
 export function toggleLock(state: GameState, uid: string): void { const i = getItem(state, uid); if (i) i.locked = !i.locked; }
 
-/** auto-equip suggestion: best item for each empty/weaker slot, without stripping other heroes */
+/**
+ * auto-equip suggestion: best item for each empty/weaker slot, without stripping other heroes.
+ * The two accessory slots are filled together (the best two pieces, keeping what is already worn where it is): judged one slot at a time,
+ * an empty second slot "wanted" the piece already worn in the first, so auto-equip only shuffled one accessory around.
+ */
 export function suggestEquip(state: GameState, heroId: HeroId): { slot: ItemSlot; item: ItemInstance; gain: number }[] {
   const role = HEROES[heroId].role === 'mage' || HEROES[heroId].role === 'healer' ? 'mag' : HEROES[heroId].role === 'protector' || HEROES[heroId].role === 'bruiser' ? 'tank' : 'phys';
   const out: { slot: ItemSlot; item: ItemInstance; gain: number }[] = [];
   const used = new Set<string>();
   for (const slot of SLOTS) {
+    if (slot.startsWith('accessory')) continue;
     const curUid = state.heroes[heroId].equip[slot];
     const cur = getItem(state, curUid);
     const curScore = cur ? itemScore(cur, role) : 0;
@@ -233,6 +238,24 @@ export function suggestEquip(state: GameState, heroId: HeroId): { slot: ItemSlot
       if (sc > bestScore * 1.02) { best = it; bestScore = sc; }
     }
     if (best) { out.push({ slot, item: best, gain: bestScore - curScore }); used.add(best.uid); }
+  }
+  // accessories: rank every piece this hero could wear (a worn piece needs a 2% better rival to be displaced), take the best two
+  const accSlots: ItemSlot[] = ['accessory1', 'accessory2'];
+  const eq = state.heroes[heroId].equip;
+  const chosen = state.inventory
+    .filter((it) => canEquip(state, heroId, it, 'accessory1') && (!equippedBy(state, it.uid) || equippedBy(state, it.uid) === heroId))
+    .map((it) => ({ it, eff: itemScore(it, role) * (accSlots.some((s) => eq[s] === it.uid) ? 1.02 : 1) }))
+    .sort((x, y) => y.eff - x.eff)
+    .slice(0, 2)
+    .map((x) => x.it);
+  const placed = new Map<ItemSlot, ItemInstance>(), free: ItemSlot[] = [];
+  for (const slot of accSlots) { const keep = chosen.find((c) => c.uid === eq[slot]); if (keep) placed.set(slot, keep); else free.push(slot); }
+  const rest = chosen.filter((c) => !accSlots.some((s) => eq[s] === c.uid));
+  rest.forEach((it, i) => { if (free[i]) placed.set(free[i], it); });
+  for (const slot of accSlots) {
+    const it = placed.get(slot); if (!it || it.uid === eq[slot]) continue;
+    const cur = getItem(state, eq[slot]);
+    out.push({ slot, item: it, gain: itemScore(it, role) - (cur ? itemScore(cur, role) : 0) });
   }
   return out;
 }

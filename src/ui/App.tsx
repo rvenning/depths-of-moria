@@ -1,3 +1,4 @@
+import { VersionBadge } from './VersionBadge.tsx';
 import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
 import './theme.css';
 import { audio, sfx } from '../audio/audio.ts';
@@ -103,6 +104,7 @@ export function App() {
             <div className="brand"><Icon k="shield" size={22} color="var(--gold)" /><span>{t('Depths of Moria')}</span></div>
             <span className="chip gold" title="Current Age">Age {s.age}</span>
             <span className="chip">Best floor {s.best}</span>
+            <VersionBadge compact />
             <div className="grow" />
             <Res icon="coin" value={s.gold} label="Gold" color="var(--gold2)" />
             <Res icon="ore" value={s.ore} label="Ore" />
