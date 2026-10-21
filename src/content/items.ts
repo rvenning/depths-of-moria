@@ -68,7 +68,7 @@ armour('leather-jerkin', 'Leather Jerkin', 1, LIGHT, ['elusive', 'swift', 'vigor
 offhand('wooden-lantern', 'Wooden Lantern', 1, { mag: 0.4, res: 0.4, hp: 0.2 }, ['arcane', 'warding', 'mending'], 'A tin lamp that never quite goes out.', 'lantern');
 acc('copper-ring', 'Copper Ring', 1, { atk: 0.4, hp: 0.3 }, ['fierce', 'vigor', 'keen'], 'A plain band. Warm when danger is near.', 'ring');
 acc('lucky-coin', 'Lucky Coin', 1, { crit: 0.5, acc: 0.3 }, ['gilded', 'keen', 'precise'], 'Heads you win; tails, you get another go.', 'coin');
-weapon('wardens-gatebreaker', 'Warden’s Gatebreaker', 'sword', 1, [], 'Forged to hold a gate shut, and so, to break one.', { ...LEG, boss: 'gate-warden', sig: sig('Gatebreaker', 'Heals the wielder for 5% max health on every kill.', { kind: 'onKill', effects: [{ k: 'healPct', pct: 5, on: 'self' }] }) });
+weapon('wardens-gatebreaker', 'Poolblade', 'sword', 1, [], 'Pulled from the black pool by someone who got away. It is never quite dry.', { ...LEG, boss: 'gate-warden', sig: sig('Pool’s Gift', 'Heals the wielder for 5% max health on every kill.', { kind: 'onKill', effects: [{ k: 'healPct', pct: 5, on: 'self' }] }) });
 
 // ---- Tier 2 — Echoing Galleries
 weapon('echohunter-sabre', 'Echohunter Sabre', 'sword', 2, ['keen', 'swift', 'fierce'], 'Curved for fast cuts in cramped halls.', { set: 'echohunter' });
@@ -83,7 +83,7 @@ armour('padded-gambeson', 'Padded Gambeson', 2, TANK, ['vigor', 'stalwart', 'tho
 offhand('tuning-fork', 'Tuning Fork', 2, { mag: 0.4, spd: 0.4 }, ['arcane', 'swift', 'mending'], 'Struck once, rings forever.', 'fork');
 acc('bone-whistle', 'Bone Whistle', 2, { atk: 0.4, spd: 0.3 }, ['swift', 'fierce', 'keen'], 'A call the bats dislike.', 'whistle');
 acc('silent-ring', 'Silent Ring', 2, { eva: 0.5, res: 0.3 }, ['elusive', 'warding'], 'Muffles whatever it touches.', 'ring');
-weapon('captains-longbow', 'Captain’s Longbow', 'bow', 2, [], 'Taken from the Goblin Captain’s own armoury. Strung with sinew.', { ...LEG, boss: 'goblin-captain', sig: sig('Captain’s Call', 'Each critical hit refills 15% of the wielder’s action gauge.', { kind: 'onCrit', gauge: 150 }) });
+weapon('captains-longbow', 'Grishnákh’s Longbow', 'bow', 2, [], 'Taken from the captain’s own armoury and strung with sinew. He will want it back.', { ...LEG, boss: 'goblin-captain', sig: sig('Captain’s Call', 'Each critical hit refills 15% of the wielder’s action gauge.', { kind: 'onCrit', gauge: 150 }) });
 
 // ---- Tier 3 — Abandoned Forges
 weapon('forgeborn-brand', 'Forgeborn Brand', 'sword', 3, ['fierce', 'keen', 'cruel'], 'Quenched in an old forge’s last coals.', { set: 'forgeborn' });
@@ -98,7 +98,7 @@ armour('asbestos-coat', 'Asbestos Coat', 3, WARD, ['warding', 'vigor', 'mending'
 offhand('ledger-of-fires', 'Ledger of Fires', 3, { mag: 0.5, res: 0.3 }, ['arcane', 'warding', 'mending'], 'Who stoked which fire, and when.', 'tome');
 acc('cinder-pendant', 'Cinder Pendant', 3, { mag: 0.4, hp: 0.3 }, ['arcane', 'vigor'], 'A coal that has not cooled.', 'pendant');
 acc('hearth-charm', 'Hearth Charm', 3, { hp: 0.4, res: 0.4 }, ['vigor', 'warding', 'mending'], 'A reminder of warm kitchens.', 'charm');
-acc('tyrants-heart-ember', 'Tyrant’s Heart-ember', 3, { hp: 0.7, atk: 0.5, def: 0.4 }, [], 'Still hot to the touch. The Tyrant’s last fire.', 'pendant', { ...LEG, boss: 'forge-tyrant', sig: sig('Heart-fire', 'At battle start, the wearer gains Thorns (25%) for 3 turns.', { kind: 'battleStart', effects: [{ k: 'status', id: 'thorns', turns: 3, power: 25, on: 'self' }] }) });
+acc('tyrants-heart-ember', 'Defiler’s Brand', 3, { hp: 0.7, atk: 0.5, def: 0.4 }, [], 'Still hot to the touch. A brand from Azog’s own forge-fire.', 'pendant', { ...LEG, boss: 'forge-tyrant', sig: sig('Brand-fire', 'At battle start, the wearer gains Thorns (25%) for 3 turns.', { kind: 'battleStart', effects: [{ k: 'status', id: 'thorns', turns: 3, power: 25, on: 'self' }] }) });
 
 // ---- Tier 4 — The Endless Stair
 weapon('stairwalker-edge', 'Stairwalker Edge', 'sword', 4, ['keen', 'swift', 'fierce'], 'Balanced for fighting on a slope.', { set: 'stairwalker' });
@@ -113,7 +113,7 @@ armour('chain-hauberk', 'Chain Hauberk', 4, TANK, ['stalwart', 'vigor', 'warding
 offhand('signal-lamp', 'Signal Lamp', 4, { mag: 0.4, spd: 0.4 }, ['arcane', 'swift', 'mending'], 'Flashes a code only you remember.', 'lantern');
 acc('rope-charm', 'Rope Charm', 4, { hp: 0.4, def: 0.3 }, ['vigor', 'stalwart'], 'A little knot that has held.', 'charm');
 acc('warg-tooth-necklace', 'Warg-tooth Necklace', 4, { atk: 0.4, crit: 0.4 }, ['fierce', 'keen', 'cruel'], 'A trophy and a warning.', 'pendant');
-armour('sentinels-chainmail', 'Sentinel’s Chainmail', 4, { hp: 1.0, def: 0.9, res: 0.3 }, [], 'Shivered off the Sentinel’s own shoulders when it fell.', { ...LEG, boss: 'stair-sentinel', sig: sig('Unyielding Chain', 'Below 50% health, the wearer gains +25% Defence.', { kind: 'lowHp', below: 0.5, stat: 'def', pct: 25 }) });
+armour('sentinels-chainmail', 'Silkmail', 4, { hp: 1.0, def: 0.9, res: 0.3 }, [], 'Spun in a lair that has never seen the sun, and tougher than anything with so many holes in it has a right to be.', { ...LEG, boss: 'stair-sentinel', sig: sig('Unyielding Silk', 'Below 50% health, the wearer gains +25% Defence.', { kind: 'lowHp', below: 0.5, stat: 'def', pct: 25 }) });
 
 // ---- Tier 5 — The Great Halls
 weapon('hallguard-blade', 'Hallguard Blade', 'sword', 5, ['fierce', 'keen', 'stalwart'], 'Pattern-welded and tall as a boy.', { set: 'hallguard' });
@@ -128,7 +128,7 @@ armour('hide-vest', 'Hide Vest', 5, LIGHT, ['vigor', 'elusive', 'swift'], 'Stiff
 offhand('drumhead-shield', 'Drumhead Shield', 5, { def: 0.5, hp: 0.5 }, ['stalwart', 'vigor', 'thorned'], 'It rings when hit. That is the point.', 'shield');
 acc('chieftains-tusk', 'Chieftain’s Tusk', 5, { atk: 0.5, hp: 0.3 }, ['fierce', 'vigor', 'cruel'], 'Snapped from a very large jaw.', 'pendant');
 acc('stone-ring', 'Stone Ring', 5, { def: 0.4, res: 0.4 }, ['stalwart', 'warding'], 'Cold as the pillar it came from.', 'ring');
-armour('chieftains-drumhide', 'Chieftain’s Drumhide', 5, { hp: 1.2, def: 0.7, res: 0.3 }, [], 'Cured hide, thick as a door; the drums still hum inside it.', { ...LEG, boss: 'cave-troll-chieftain', sig: sig('Drumbeat', 'When an ally falls, the wearer is Rallied (+30%) for 4 turns.', { kind: 'allyFalls', effects: [{ k: 'status', id: 'rally', turns: 4, power: 30, on: 'self' }] }) });
+armour('chieftains-drumhide', 'Cave-troll’s Drumhide', 5, { hp: 1.2, def: 0.7, res: 0.3 }, [], 'Cured hide, thick as a door; the drums still hum inside it.', { ...LEG, boss: 'cave-troll-chieftain', sig: sig('Drumbeat', 'When an ally falls, the wearer is Rallied (+30%) for 4 turns.', { kind: 'allyFalls', effects: [{ k: 'status', id: 'rally', turns: 4, power: 30, on: 'self' }] }) });
 
 // ---- Tier 6 — The Flooded Deeps
 weapon('deepdelver-cutlass', 'Deepdelver Cutlass', 'sword', 6, ['fierce', 'keen', 'vampiric'], 'Salt-proof and sea-bright.', { set: 'deepdelver' });
@@ -143,7 +143,7 @@ armour('waxed-coat', 'Waxed Coat', 6, LIGHT, ['elusive', 'warding', 'vigor'], 'B
 offhand('glass-lantern', 'Glass Lantern', 6, { mag: 0.5, res: 0.3 }, ['arcane', 'warding', 'mending'], 'Burns green. Better than nothing.', 'lantern');
 acc('algae-charm', 'Algae Charm', 6, { hp: 0.4, res: 0.4 }, ['vigor', 'warding', 'mending'], 'Slick but lucky.', 'charm');
 acc('coral-ring', 'Coral Ring', 6, { crit: 0.4, eva: 0.3 }, ['keen', 'elusive'], 'Pink as a dawn that never reaches the deeps.', 'ring');
-acc('horrors-pearl', 'Horror’s Pearl', 6, { hp: 0.6, res: 0.6, mag: 0.4 }, [], 'It looks back at you.', 'pendant', { ...LEG, boss: 'deepwater-horror', sig: sig('Tidal Ward', 'At battle start, every ally gains a shield worth 60% of the wearer’s Magic for 3 turns.', { kind: 'battleStart', effects: [{ k: 'shield', mult: 0.6, turns: 3, on: 'allies' }] }) });
+acc('horrors-pearl', 'Pearl of the Deep', 6, { hp: 0.6, res: 0.6, mag: 0.4 }, [], 'It looks back at you.', 'pendant', { ...LEG, boss: 'deepwater-horror', sig: sig('Tidal Ward', 'At battle start, every ally gains a shield worth 60% of the wearer’s Magic for 3 turns.', { kind: 'battleStart', effects: [{ k: 'shield', mult: 0.6, turns: 3, on: 'allies' }] }) });
 
 // ---- Tier 7 — The Shadow Archives
 weapon('archivist-blade', 'Archivist Blade', 'sword', 7, ['arcane', 'keen', 'fierce'], 'A letter-knife for very long letters.', { set: 'archivist' });
@@ -158,7 +158,7 @@ armour('vellum-coat', 'Vellum Coat', 7, LIGHT, ['elusive', 'warding', 'swift'], 
 offhand('reading-lens', 'Reading Lens', 7, { acc: 0.5, crit: 0.3 }, ['precise', 'keen', 'cruel'], 'Sees the small print on everything.', 'lens');
 acc('ink-locket', 'Ink Locket', 7, { mag: 0.4, hp: 0.3 }, ['arcane', 'vigor'], 'Holds one very dark drop.', 'pendant');
 acc('index-ring', 'Index Ring', 7, { crit: 0.4, acc: 0.3 }, ['keen', 'precise'], 'Finds the entry you need.', 'ring');
-acc('keepers-quill', 'Keeper’s Quill', 7, { mag: 0.7, res: 0.5, spd: 0.3 }, [], 'Signs only the truest names.', 'quill', { ...LEG, boss: 'keeper-of-records', sig: sig('Index of Haste', 'The wearer’s skills start 2 turns closer to ready.', { kind: 'startCdReduce', n: 2 }) });
+acc('keepers-quill', 'Quill of Mazarbul', 7, { mag: 0.7, res: 0.5, spd: 0.3 }, [], 'Signs only the truest names.', 'quill', { ...LEG, boss: 'keeper-of-records', sig: sig('Index of Haste', 'The wearer’s skills start 2 turns closer to ready.', { kind: 'startCdReduce', n: 2 }) });
 
 // ---- Tier 8 — The Black Chasm
 weapon('shadowward-blade', 'Shadowward Blade', 'sword', 8, ['fierce', 'keen', 'cruel'], 'Dull in daylight, bright in the dark.', { set: 'shadowward' });
@@ -173,7 +173,7 @@ armour('bridgewalkers-coat', 'Bridgewalker’s Coat', 8, LIGHT, ['elusive', 'swi
 offhand('pale-lantern', 'Pale Lantern', 8, { mag: 0.5, eva: 0.3 }, ['arcane', 'elusive', 'mending'], 'Gives light that does not carry.', 'lantern');
 acc('dusk-locket', 'Dusk Locket', 8, { hp: 0.4, res: 0.4 }, ['vigor', 'warding'], 'A lock of hair, long ago.', 'pendant');
 acc('gloom-ring', 'Gloom Ring', 8, { crit: 0.4, critDmg: 0.4 }, ['keen', 'cruel'], 'The dark thinks of you fondly.', 'ring');
-weapon('stalkers-fang', 'Stalker’s Fang', 'dagger', 8, [], 'A single tooth of darkness, still sharp.', { ...LEG, boss: 'chasm-stalker', sig: sig('Ambusher’s Edge', 'The wielder’s first attack each battle has +40 Critical chance.', { kind: 'firstStrike', critBonus: 40 }) });
+weapon('stalkers-fang', 'Oathbreaker’s Dagger', 'dagger', 8, [], 'Pale, cold steel that wants, more than anything, to be forgiven.', { ...LEG, boss: 'chasm-stalker', sig: sig('Ambusher’s Edge', 'The wielder’s first attack each battle has +40 Critical chance.', { kind: 'firstStrike', critBonus: 40 }) });
 
 // ---- Tier 9 — The Chamber of Flame
 weapon('flamecaller-blade', 'Flamecaller Blade', 'sword', 9, ['fierce', 'cruel', 'keen'], 'Forged in the deepest fire.', { set: 'flamecaller' });

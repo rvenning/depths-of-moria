@@ -86,3 +86,10 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [x] The wargs (Cinder Hound, Stair Warg, Warg Hunter, Packleader, Flame Hound) are lean wolves: bushy tail, tall pointed ears, open jaws with fangs.
 - [x] The six goblins no longer share one silhouette: a fat crowned Grub, a spiked and war-painted Warchief with trophy skulls, a caped and breastplated Captain, a lamp-lit Tunneler, a hooded, scarfed Ambusher with two daggers.
 - Still shared: orcs, trolls and the stone constructs reuse one body plan per family (differing in gear, scale and colour); the flying and ghost families are unchanged.
+
+## Middle-earth roster (2026-10-22, v1.2.0)
+- [x] All 80 enemies re-themed (ids, stats and skills unchanged, so saves and balance are intact): Moria goblins and cave-orcs, Gundabad orcs with wargs and riders, Isengard Uruk-hai (white hand) and Mordor orcs (red eye), Stone-, Hill- and Cave-trolls, Olog-hai, barrow-wights and the dwarf dead, Oathbreakers, the Black Rider, crows, fire-drakes.
+- [x] Named villains: the Watcher in the Water (ch 1), Gollum (ch 2), Grishnákh (ch 2 boss), Azog the Defiler (ch 3 boss), Shelob (ch 4 boss), the cave-troll of Mazarbul (ch 5), the Nameless Thing (ch 6), the Wight-king (ch 7), the King of the Dead (ch 8), the Herald of Udûn (ch 9), the Balrog (ch 10). Boss skill names, phase text, lore, drop items, quests and chapter blurbs follow.
+- [x] New art: a Watcher (seven arms from a pool), Gollum and his kin, wights, a Ringwraith, a crow, dwarf dead, Oathbreakers (fading ghosts), warg riders, chained and pillar-wielding trolls, Uruk sigils, a dragon-shaped drake, a rebuilt Balrog (flame mane, sword and whip of fire) with a lesser version for the Herald; orcs and goblins now have narrow slit eyes.
+- [x] The "Original" reskin maps every new name to a neutral one (e.g. Gollum to Skulker, Azog to Vorg, Shelob to the Great Weaver); the leak test covers the new terms.
+- Not done: the warg-and-rider pair is one sprite (the rider does not drop when the warg falls), and Gollum and Azog are not recurring villains across Ages (each appears once, in its chapter).

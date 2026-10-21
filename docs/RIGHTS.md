@@ -7,7 +7,7 @@
 | Area | Status |
 |---|---|
 | Code, systems, battle engine, balance, progression, UI | Original |
-| Enemy roster (80 creatures), boss mechanics, chapter concepts, Age mechanic | Original design (the ten chapters are "original game-design chapter concepts, not claims about canon") |
+| Enemy roster (80 creatures), boss mechanics, chapter concepts, Age mechanic | Original design and stats; the creature *names and themes* draw on Middle-earth (see the restricted list below), and each has a neutral name in the Original reskin (the ten chapters are "original game-design chapter concepts, not claims about canon") |
 | 130 items, 10 sets, affixes, events, quests, achievements, lore entries, bond scenes | Original writing. No sentences, dialogue or song lyrics are taken from any book or film. Two lines that were too close to well-known quotations were rewritten during review. |
 | Art | Painted procedurally in code in an original stylised look. No film likenesses, no imported or ripped images. |
 | Music | The score is original (composed in code, `src/audio/score.ts`). The shipped tracks in `public/music/` are that score rendered offline (`tools/music/render-music.ts`) through the **MuseScore_General (Lite)** SoundFont, so they contain instrument samples. Licence below. |
@@ -23,6 +23,7 @@ These names come from the Tolkien legendarium and are the only restricted conten
 - **Antagonist and places:** the Balrog, Moria, Khazad-dûm ("The Bridge of Khazad-dûm" chapter), Gondor, the Shire, the Lonely Mountain, the White City / White Tower.
 - **Relics:** Light of Eärendil, Horn of Gondor, Wisdom of the Istari, Blessing of the Valar, Fortune of the Shire, Courage of the Free Peoples.
 - **Terms:** Fellowship, Istari, Valar, Free Peoples.
+- **Enemies and bosses (the roster is themed on Middle-earth since v1.2):** the Watcher in the Water, Gollum, Grishnákh, Azog, Bolg and Gundabad, Gorbag, Shelob, the Great Goblin, the Uruk-hai, Olog-hai and snagas, the white hand and Red Eye sigils, Isengard and Mordor, Mazarbul, barrow-wights, the Ringwraith and the Morgul-blade, the Oathbreakers and the King of the Dead, Udûn and Durin’s Bane, the crebain. Generic words kept as they are common fantasy vocabulary: goblin, orc, troll, warg, wight, drake.
 - **Hero epithets:** "Ranger of the North", "Axe of the Lonely Mountain", "Bearer of the Burden", "Grey Pilgrim", "Captain of the White Tower", "Gardener, Gaffer's Son".
 
 Everything else (all other bosses, enemies, items, set names, event text, lore) is original. Item names were deliberately kept original; no artefact names from the books are used.

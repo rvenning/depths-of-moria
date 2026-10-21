@@ -21,7 +21,24 @@ import { LORE } from '../content/lore.ts';
 import { RELICS } from '../content/relics.ts';
 
 /** longest first so that "Khazad-dûm" wins over "Moria"-style partials */
-const ORIGINAL: [RegExp, string][] = [
+/** a name that opens a sentence or a quotation keeps its capital */
+const cap = (word: string) => (_m: string, off: number, whole: string): string => (off === 0 || /[.!?“—]\s*$/.test(whole.slice(0, off)) ? word[0].toUpperCase() + word.slice(1) : word);
+const ORIGINAL: [RegExp, string | ((m: string, off: number, whole: string) => string)][] = [
+  // the cast of the deep (the roster's Middle-earth names)
+  [/The Watcher in the Water/g, 'The Pool-thing'], [/Watcher in the Water/g, 'Pool-thing'], [/Watcher/g, 'Pool-thing'],
+  [/Azog the Defiler/g, 'Vorg the Defiler'], [/Azog/g, 'Vorg'],
+  [/Bolg of Gundabad/g, 'Gorrak of the Northern Peaks'], [/Gundabad/g, 'Northern Peaks'],
+  [/Grishnákh/g, 'Skarrak'], [/Gorbag/g, 'Ruzgul'], [/Gollum/g, 'Skulker'],
+  [/^Shelob$/g, 'The Great Weaver'], [/Shelob’s/g, cap('the Great Weaver’s')], [/Shelob/g, cap('the Great Weaver')],
+  [/The Great Goblin/g, 'The Warren-king'], [/Great Goblin/g, 'Warren-king'],
+  [/Uruk-hai/g, 'Iron-orcs'], [/Uruks/g, 'Iron-orcs'], [/Uruk/g, 'Iron-orc'], [/Olog-hai/g, 'Black-troll'],
+  [/Snagas/g, 'Cutters'], [/Snaga/g, 'Cutter'],
+  [/Mazarbul Dead/g, 'Archive Dead'], [/Mazarbul/g, 'the Archive'],
+  [/Barrow-/g, 'Grave-'], [/Ringwraith/g, 'Hollow Rider'], [/Morgul-/g, 'Gloom-'],
+  [/The King of the Dead/g, 'The Pale King'], [/King of the Dead/g, 'Pale King'],
+  [/Udûn/g, 'the Deepfire'], [/Durin’s Bane/g, 'the Deep Terror'],
+  [/Isengard/g, 'the Ironworks'], [/Mordor/g, 'the Black Country'], [/the Red Eye/g, 'the Crimson Eye'], [/Crebain/g, 'Black Crows'],
+  [/Moria Doorward/g, 'Deepmine Doorward'], [/Moria Orc Guard/g, 'Deepmine Orc Guard'],
   [/The Bridge of Khazad-dûm/g, 'The Deepmine Span'],
   [/Bridge of Khazad-dûm/g, 'Deepmine Span'],
   [/Khazad-dûm/g, 'the Deepmine'],
@@ -68,9 +85,7 @@ const ORIGINAL: [RegExp, string][] = [
 export function t(text: string | undefined | null): string {
   if (!text) return '';
   if (mode === 'fan') return text;
-  let out = text;
-  for (const [re, rep] of ORIGINAL) out = out.replace(re, rep);
-  return out;
+  return replaceAll(text);
 }
 
 /** names only (used for headings, aria labels etc.) */
@@ -102,9 +117,9 @@ export function applyNaming(m: Naming): void {
 
 function replaceAll(text: string): string {
   let out = text;
-  for (const [re, rep] of ORIGINAL) out = out.replace(re, rep);
-  return out;
+  for (const [re, rep] of ORIGINAL) out = out.replace(re, rep as string);
+  return out.replace(/\b([Tt])he the\b/g, '$1he');       // "of the Moria warrens" -> "of the the Deepmine warrens" -> "of the Deepmine warrens"
 }
 
 /** every restricted term the reskin is meant to remove (used by the tests) */
-export const RESTRICTED = /Aragorn|Gimli|Frodo|Legolas|Boromir|Gandalf|Balrog|Moria|Khazad|Gondor|Shire|Eärendil|Istari|Valar|Fellowship|Lonely Mountain|Strider|Gamgee|Samwise|\bSam\b|White City|White Tower|Free Peoples/;
+export const RESTRICTED = /Aragorn|Gimli|Frodo|Legolas|Boromir|Gandalf|Balrog|Moria|Khazad|Gondor|Shire|Eärendil|Istari|Valar|Fellowship|Lonely Mountain|Strider|Gamgee|Samwise|\bSam\b|White City|White Tower|Free Peoples|Gollum|Azog|Gundabad|Grishnákh|Gorbag|Shelob|Watcher|Great Goblin|Uruk|Olog-hai|Snaga|Mazarbul|Barrow-|Ringwraith|Morgul|King of the Dead|Udûn|Durin’s Bane|Isengard|Mordor|Red Eye|Crebain/;

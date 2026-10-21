@@ -5,7 +5,7 @@ const Q = (id: string, chapter: number, title: string, desc: string, metric: str
 
 export const QUESTS: QuestDef[] = [
   Q('q-first-blood', 1, 'First Blood', 'Defeat 15 enemies.', 'kills', 15, { gold: 100, renown: 1 }),
-  Q('q-gate-open', 1, 'Open the Gate', 'Defeat the Gate Warden (floor 100).', 'best', 100, { essence: 15, renown: 2, item: 'rare' }),
+  Q('q-gate-open', 1, 'Open the Gate', 'Defeat the Watcher in the Water (floor 100).', 'best', 100, { essence: 15, renown: 2, item: 'rare' }),
   Q('q-company', 1, 'Gather the Company', 'Recruit three heroes.', 'heroes', 3, { gold: 150, renown: 1 }),
   Q('q-ten-floors', 1, 'Ten Deep', 'Reach floor 10.', 'best', 10, { gold: 120 }),
   Q('q-loot-30', 1, 'Spoils of the Deep', 'Find 30 items.', 'itemsFound', 30, { gold: 200, ore: 10, cloth: 10 }),

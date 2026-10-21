@@ -72,6 +72,13 @@ function eye(k: K, x: number, y: number, r: number, color: string, angry = 0): v
   k.S.dot(x - r * 0.25, y - r * 0.35, '#ffffff');
 }
 
+/** a narrow, malevolent slit of an eye (orcs and goblins) */
+function slit(k: K, x: number, y: number, w: number, color: string, angry = 0): void {
+  const [cx, cy] = T(k, [x, y]);
+  k.S.ell(cx, cy, w * 1.1, w * 0.42, mat(color, true), { flat: true, tone: 3.4, noLine: true });
+  k.S.dot(x, y + angry * 0.15, '#150d20');
+}
+
 // ---------------------------------------------------------------- shared bits
 function horns(k: K, x: number, y: number, s: number, color: string, flip = 1): void {
   for (const d of [-1, 1]) poly(k, [[x + d * 10 * s, y], [x + d * 22 * s * flip, y - 26 * s], [x + d * 30 * s, y - 38 * s], [x + d * 24 * s, y - 8 * s], [x + d * 12 * s, y + 4 * s]], color, true);
@@ -123,9 +130,9 @@ function wing(k: K, x: number, y: number, s: number, color: string, flip: number
 function tail(k: K, x: number, y: number, s: number, color: string, len = 70): void {
   pline(k, bez([x, y], [x + 30 * s, y + 10 * s], [x + len * s, y - 10 * s], [x + (len + 14) * s, y - 40 * s]), 9 * s, color, 4 * s);
 }
-function tentacle(k: K, x: number, y: number, ang: number, len: number, w: number, color: string, wob: number): void {
+function tentacle(k: K, x: number, y: number, ang: number, len: number, w: number, color: string, wob: number, amp = 14): void {
   const pts: Pt[] = [];
-  for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push([Math.sin(t * 5 + wob) * 14 * t, -t * len]); }
+  for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push([Math.sin(t * 6 + wob) * amp * t, -t * len]); }
   xf(k, x, y, ang, () => pline(k, pts, w, color, w * 0.55));
 }
 
@@ -134,7 +141,7 @@ type Painter = (k: K, p: Pal) => void;
 
 /** the six goblins share a skeleton but not a silhouette: the feature list picks a fat grub, a spiked warchief, a caped captain, a lamp-lit tunneler, a hooded ambusher */
 const goblin: Painter = (k, p) => {
-  const fat = p.has('crown'), caped = p.has('cape'), warchief = p.has('horns') && !caped, scarf = p.has('hood'), lamp = p.has('pick');
+  const fat = p.has('crown'), caped = p.has('cape'), warchief = p.has('horns') && p.has('axe'), scarf = p.has('hood'), lamp = p.has('pick');
   if (caped) poly(k, [[82, 124], [176, 124], [204, 222], [52, 228]], shade(p.accent, -0.2), true, { grad: 0.6 });                       // the captain's cape hangs behind him
   if (scarf) poly(k, [[84, 150], [172, 150], [196, 226], [62, 232], [76, 196]], shade(p.gear, -0.05), false, { grad: 0.5 });          // a tattered cloak with a ragged hem
   limb(k, 112, 190, 96, 232, fat ? 22 : 18, 14, shade(p.body, -0.1)); limb(k, 146, 190, 160, 232, fat ? 22 : 18, 14, shade(p.body, -0.2));
@@ -146,7 +153,8 @@ const goblin: Painter = (k, p) => {
   if (caped || warchief) for (const x of [104, 128, 152]) circle(k, x, 192, 3, shade(p.accent, 0.2));                                  // studded belt
   if (warchief) for (const [x, y] of [[100, 208], [124, 212], [150, 208]]) { circle(k, x, y, 7, BONE); circle(k, x - 2.5, y - 1, 1.6, '#150d20'); circle(k, x + 2.5, y - 1, 1.6, '#150d20'); }   // trophy skulls
   limb(k, 166, 138, 190, 172, 15, 12, p.body);
-  if (p.has('pick')) weaponHammer(k, 192, 176, 0.5, 0.7);
+  if (p.has('staff')) { limb(k, 194, 236, 194, 96, 7, 6, WOOD); circle(k, 194, 88, 10, p.accent, { emissive: true }); }
+  else if (p.has('pick')) weaponHammer(k, 192, 176, 0.5, 0.7);
   else if (p.has('cleaver')) weaponSword(k, 192, 176, 0.6, caped ? 1.05 : 0.8, '#b9bfc6');
   else if (p.has('axe')) weaponAxe(k, 192, 176, 0.3, 0.9);
   else if (p.has('dagger')) weaponSword(k, 192, 176, 0.8, 0.5);
@@ -163,7 +171,8 @@ const goblin: Painter = (k, p) => {
   if (p.has('hood')) poly(k, [[80, 100], [118, 54], [158, 100], [150, 120], [86, 120]], p.gear, true);
   if (p.has('horns')) horns(k, 118, 66, caped ? 1.25 : 1, '#d8d0b8');
   if (p.has('crown')) { poly(k, [[90, 70], [98, 48], [108, 66], [118, 44], [128, 66], [138, 48], [146, 70]], '#d9b25f', false, { flat: true }); for (const x of [98, 118, 138]) circle(k, x, 62, 2.6, '#c8382a'); }
-  eye(k, 104, 98, 6, p.eye, 1); eye(k, 130, 98, 6, p.eye, -1);
+  slit(k, 104, 98, 7.5, p.eye, 1); slit(k, 130, 98, 7.5, p.eye, -1);
+  if (p.has('ember')) for (const [x1, y1, x2, y2] of [[96, 150, 112, 184], [146, 140, 160, 178], [126, 160, 132, 196], [108, 84, 114, 104]]) line(k, x1, y1, x2, y2, 2.6, p.accent);   // glowing cracks
   if (warchief) for (const dy of [0, 7, 14]) line(k, 92, 106 + dy, 108, 112 + dy, 3, '#c8382a');                                       // war paint
   if (scarf) poly(k, [[86, 114], [150, 114], [146, 136], [92, 136]], shade(p.gear, -0.25), true);                                      // a scarf over the mouth
   else { poly(k, [[102, 118], [134, 118], [128, 128], [108, 128]], '#2a1410', false, { flat: true }); fangs(k, 118, 120, warchief || caped ? 1.1 : 0.8); }
@@ -182,11 +191,19 @@ const archer: Painter = (k, p) => {
   ears(k, 120, 100, 0.9, p.body);
   circle(k, 120, 100, 32, p.body);
   poly(k, [[84, 102], [120, 54], [158, 102], [150, 118], [90, 118]], p.gear, true);
-  eye(k, 108, 100, 5.5, p.eye, 1); eye(k, 132, 100, 5.5, p.eye, -1);
+  slit(k, 108, 100, 7, p.eye, 1); slit(k, 132, 100, 7, p.eye, -1);
   if (p.has('feather')) line(k, 140, 62, 156, 38, 4, '#d94a3a');
 };
 
 const bat: Painter = (k, p) => {
+  if (p.has('crow')) {                                                                                                                                // a carrion crow
+    wing(k, 118, 132, 1.15, '#1a1a22', -1, false); wing(k, 138, 132, 1.15, '#242430', 1, false);
+    poly(k, [[116, 184], [140, 184], [150, 230], [128, 216], [106, 230]], p.body);
+    limb(k, 120, 186, 116, 214, 5, 3, '#6a5a30'); limb(k, 138, 186, 142, 214, 5, 3, '#6a5a30');
+    ellipse(k, 128, 152, 26, 38, p.body); circle(k, 128, 114, 22, p.body);
+    poly(k, [[110, 110], [74, 118], [110, 128]], '#d8b040'); eye(k, 118, 108, 3.8, p.eye, 1);
+    return;
+  }
   wing(k, 118, 130, 1.3, shade(p.body, -0.15), -1); wing(k, 138, 130, 1.3, shade(p.body, -0.25), 1);
   ellipse(k, 128, 150, 28, 40, p.body);
   limb(k, 120, 184, 116, 214, 8, 6, p.accent); limb(k, 138, 184, 144, 214, 8, 6, p.accent);
@@ -202,8 +219,15 @@ const orc: Painter = (k, p) => {
   poly(k, [[76, 116], [184, 116], [170, 200], [88, 200]], p.body, true);
   if (p.has('plate')) { plate(k, 128, 124, 90, 64, p.gear); plate(k, 128, 190, 74, 18, shade(p.gear, -0.15)); }
   else poly(k, [[92, 150], [164, 150], [168, 204], [88, 204]], p.gear, true);
+  if (p.has('whitehand')) {                                                                                                      // the white hand of the Ironworks
+    poly(k, [[116, 156], [140, 156], [142, 180], [114, 180]], '#e8e8e0', false, { flat: true });
+    for (let i = 0; i < 4; i++) poly(k, [[116 + i * 7, 156], [120 + i * 7, 156], [120 + i * 7, 138 - (i % 3 === 1 ? 4 : 0)], [117 + i * 7, 138 - (i % 3 === 1 ? 4 : 0)]], '#e8e8e0', false, { flat: true });
+    poly(k, [[114, 170], [104, 160], [108, 156], [118, 164]], '#e8e8e0', false, { flat: true });
+  }
+  if (p.has('redeye')) { ellipse(k, 128, 158, 17, 9, '#c8201a', { emissive: true }); ellipse(k, 128, 158, 2.6, 8, '#150d20'); }              // the Red Eye of the Black Country
   ellipse(k, 74, 122, 22, 16, p.gear); ellipse(k, 184, 122, 22, 16, shade(p.gear, -0.1));
-  limb(k, 182, 126, 212, 168, 22, 17, p.body); limb(k, 74, 126, 52, 166, 22, 17, p.body);
+  limb(k, 182, 126, 212, 168, 22, 17, p.has('azog') ? '#8a8f98' : p.body); limb(k, 74, 126, 52, 166, 22, 17, p.body);
+  if (p.has('azog')) for (const t of [0.3, 0.6]) circle(k, 182 + 30 * t, 126 + 42 * t, 4, '#c8ccd2');                                                      // rivets on the iron arm
   if (p.has('hammer')) weaponHammer(k, 214, 172, 0.45, 0.95);
   else if (p.has('axe')) weaponAxe(k, 214, 172, 0.35, 1.1);
   else if (p.has('sword')) weaponSword(k, 214, 172, 0.5, 1.0);
@@ -216,7 +240,10 @@ const orc: Painter = (k, p) => {
   circle(k, 128, 90, 36, p.body);
   poly(k, [[96, 86], [160, 86], [158, 76], [98, 76]], shade(p.body, -0.25));
   if (p.has('helm')) helm(k, 128, 74, 1.25, '#6a6e76');
-  eye(k, 114, 92, 6, p.eye, 1); eye(k, 142, 92, 6, p.eye, -1);
+  slit(k, 114, 92, 8, p.eye, 1); slit(k, 142, 92, 8, p.eye, -1);
+  if (p.has('azog')) { line(k, 106, 74, 122, 112, 2.6, '#d8d0c0'); line(k, 152, 74, 140, 104, 2.6, '#7a2a20'); }                                   // old scars
+  if (p.has('gundabad')) { ellipse(k, 128, 122, 58, 13, '#6a5a46'); for (const d of [-1, 0, 1]) poly(k, [[128 + d * 22, 66], [128 + d * 26, 38], [128 + d * 14, 64]], '#b8a888', false, { flat: true }); }   // a fur collar and a spiked cap
+  if (p.has('ember')) for (const [x1, y1, x2, y2] of [[96, 150, 112, 188], [150, 146, 164, 184], [126, 164, 134, 200]]) line(k, x1, y1, x2, y2, 2.8, p.accent);
   poly(k, [[104, 108], [152, 108], [146, 124], [110, 124]], '#2a1410', false, { flat: true });
   poly(k, [[108, 108], [112, 96], [118, 110]], BONE, false, { flat: true }); poly(k, [[148, 108], [144, 96], [138, 110]], BONE, false, { flat: true });
   if (p.has('horns')) horns(k, 128, 62, 1, '#d8d0b8');
@@ -247,7 +274,13 @@ const warg: Painter = (k, p) => {
   limb(k, 178, 176, 188, 232, 20, 11, shade(p.body, -0.15)); limb(k, 150, 186, 150, 232, 20, 11, shade(p.body, -0.25));
   for (const x of [62, 106, 186, 148]) ellipse(k, x, 234, 11, 5, shade(p.body, -0.3));
   ellipse(k, 146, 152, 62, 38, p.body);
-  ellipse(k, 100, 134, 36, 36, p.body);                                                                                                          // the raised shoulders
+  ellipse(k, 100, 134, 36, 36, p.body);
+  if (p.has('rider')) {                                                                                                                              // a Gundabad orc on its back
+    poly(k, [[118, 124], [172, 124], [166, 86], [124, 86]], '#2a2a32', true);
+    circle(k, 146, 70, 15, '#5a5a48'); poly(k, [[130, 66], [146, 46], [162, 66], [160, 62]], '#4a4a52', true);
+    slit(k, 140, 71, 6, '#ff4a22', 1); slit(k, 154, 71, 6, '#ff4a22', -1);
+    limb(k, 160, 100, 188, 118, 10, 8, '#5a5a48'); weaponSpear(k, 192, 122, 0.22, 0.95);
+  }                                                                                                          // the raised shoulders
   if (p.has('ruff')) poly(k, [[80, 120], [96, 90], [108, 116], [122, 88], [134, 114], [150, 90], [158, 120], [140, 150], [90, 150]], shade(p.body, 0.15));
   ellipse(k, 130, 178, 40, 14, shade(p.body, 0.2));                                                                                                // a paler belly
   poly(k, [[104, 112], [70, 98], [28, 134], [24, 148], [60, 152], [104, 150]], p.body, true);                                                      // head and long snout
@@ -272,6 +305,8 @@ const troll: Painter = (k, p) => {
   limb(k, 186, 112, 216, 172, 32, 22, p.body); limb(k, 70, 112, 38, 172, 32, 22, p.body);
   if (p.has('club')) weaponClub(k, 218, 178, 0.5, 1.25);
   else if (p.has('spear')) weaponSpear(k, 218, 178, 0.35, 1.2);
+  else if (p.has('pillar')) { poly(k, [[208, 50], [242, 50], [240, 196], [212, 196]], '#9a968c', false, { grad: 0.6 }); poly(k, [[202, 40], [248, 40], [248, 54], [202, 54]], '#b0aca0'); }
+  if (p.has('manacle')) for (const [x, y] of [[216, 172], [38, 172]]) { circle(k, x, y, 10, METAL); circle(k, x, y, 5.5, '#1a1a1e'); line(k, x, y + 8, x + (x > 128 ? 10 : -10), y + 36, 3, METAL); }
   if (p.has('chain')) for (let i = 0; i < 6; i++) circle(k, 40 + i * 5, 176 - i * 8, 5, METAL);
   circle(k, 130, 80, 30, p.body);
   poly(k, [[102, 84], [158, 84], [156, 72], [104, 72]], shade(p.body, -0.3));
@@ -292,7 +327,61 @@ const wraith: Painter = (k, p) => {
   if (p.has('scroll')) poly(k, [[196, 160], [226, 156], [228, 190], [198, 194]], '#d8c8a0');
   if (p.has('keys')) for (let i = 0; i < 3; i++) circle(k, 108 + i * 20, 168, 5, '#d9b25f');
   if (p.has('book')) poly(k, [[170, 164], [210, 156], [214, 192], [174, 200]], '#4a2a5a');
+  if (p.has('wight')) {
+    poly(k, [[84, 116], [172, 116], [166, 196], [90, 196]], shade(p.gear, 0.15), true);                                                                 // a rusted mail shirt
+    for (let y = 124; y < 192; y += 9) for (let x = 94 + (y % 18 ? 0 : 5); x < 164; x += 10) circle(k, x, y, 1.6, shade(p.gear, 0.45));
+    ellipse(k, 128, 94, 26, 30, '#cfd6cc', { g: 'face' });                                                                                              // a skull-pale face
+    ellipse(k, 116, 90, 7, 9, '#08060c'); ellipse(k, 140, 90, 7, 9, '#08060c');
+    circle(k, 116, 91, 2.6, p.eye, { emissive: true }); circle(k, 140, 91, 2.6, p.eye, { emissive: true });
+    poly(k, [[118, 108], [138, 108], [134, 118], [122, 118]], '#08060c', false, { flat: true });
+    for (const x of [122, 128, 134]) line(k, x, 108, x, 117, 1.4, '#cfd6cc');
+  }
+  if (p.has('weeds')) for (let i = 0; i < 6; i++) pline(k, bez([86 + i * 17, 124], [80 + i * 17, 154], [92 + i * 17, 186], [86 + i * 17, 226]), 3, '#3a5a3a');
+  if (p.has('ringwraith')) {
+    for (const x of [80, 176]) ellipse(k, x, 124, 22, 14, '#1a1a22');                                                                                    // black pauldrons
+    ellipse(k, 128, 94, 34, 40, '#050408', { g: 'face' });                                                                                              // an empty hood
+    circle(k, 121, 98, 2, p.eye, { emissive: true }); circle(k, 135, 98, 2, p.eye, { emissive: true });
+    poly(k, [[108, 58], [128, 22], [148, 58]], '#2a2a34', true);
+  }
+  if (p.has('sword')) weaponSword(k, 214, 176, 0.5, 1.05, p.has('ringwraith') ? '#b8d0f0' : '#8a98a8');
   if (p.has('crown')) poly(k, [[98, 58], [106, 40], [116, 56], [128, 36], [140, 56], [150, 40], [158, 58]], '#d9b25f', false, { flat: true });
+};
+
+/** Gollum and his pale kin: a crouched, long-limbed thing with enormous eyes */
+const gollum: Painter = (k, p) => {
+  const skin = p.body, dark = shade(p.body, -0.25), creeper = p.has('creeper');
+  limb(k, 176, 196, 160, 228, 13, 8, dark); ellipse(k, 150, 232, 18, 6, dark);                                                                          // back leg and a big flat foot
+  limb(k, 190, 188, 204, 226, 12, 7, shade(p.body, -0.35)); ellipse(k, 208, 232, 14, 5, dark);
+  ellipse(k, 150, 166, 48, 36, skin);                                                                                                                  // the hunched back
+  ellipse(k, 180, 188, 28, 24, skin);
+  if (!creeper) poly(k, [[160, 184], [206, 186], [200, 214], [190, 206], [180, 218], [168, 206], [160, 214]], p.gear, true);                           // a ragged loincloth
+  limb(k, 110, 160, 88, 198, 11, 7, skin); limb(k, 128, 164, 120, 210, 11, 7, shade(p.body, -0.12));
+  for (const [x, y] of [[84, 204], [116, 214]]) { ellipse(k, x, y, 9, 5, dark); for (const d of [-6, 0, 6]) line(k, x + d, y + 3, x + d - 2, y + 12, 2.5, dark); }
+  if (!creeper) { poly(k, [[70, 204], [88, 198], [94, 210], [78, 214]], '#b8c8d8', true); circle(k, 76, 206, 1.8, '#10202a'); }                           // a raw fish
+  for (let i = 0; i < 5; i++) circle(k, 120 + i * 16, 138 + Math.abs(i - 2) * 3, 3.2, shade(skin, 0.18));                                               // knobs of spine
+  poly(k, [[96, 150], [132, 146], [134, 170], [104, 176]], skin, true);
+  ellipse(k, 98, 128, 36, 32, skin);
+  for (const d of [-1, 1]) poly(k, [[98 + d * 30, 120], [98 + d * 52, 100], [98 + d * 34, 138]], shade(skin, -0.08), true);                              // big thin ears
+  if (!creeper) for (let i = 0; i < 5; i++) line(k, 84 + i * 8, 100, 80 + i * 10 + Math.sin(i) * 6, 78 + i * 2, 1.6, '#6a6a58');                       // a few wisps of hair
+  circle(k, 82, 126, creeper ? 14 : 13, p.eye, { emissive: true }); circle(k, 114, 124, creeper ? 13 : 12, p.eye, { emissive: true });                  // the pale eyes
+  circle(k, 80, 128, 6.5, '#101820'); circle(k, 112, 126, 6, '#101820'); circle(k, 77, 123, 2.2, '#ffffff'); circle(k, 109, 121, 2, '#ffffff');
+  poly(k, [[78, 150], [112, 148], [108, 158], [84, 160]], '#2a1a18', false, { flat: true });
+  for (const x of [84, 92, 100, 106]) poly(k, [[x, 150], [x + 3, 159], [x + 6, 150]], BONE, false, { flat: true });
+};
+
+/** the Watcher in the Water: seven arms from a black pool and two pale eyes below the surface */
+const watcher: Painter = (k, p) => {
+  const dark = shade(p.body, -0.3);
+  ellipse(k, 128, 232, 108, 24, dark);
+  for (const [rx, ry, col] of [[96, 18, shade(p.body, 0.1)], [64, 12, shade(p.body, 0.2)]] as const) ellipse(k, 128, 230, rx, ry, col);
+  const arms: [number, number, number, number][] = [[40, -0.7, 120, 13], [66, -0.46, 150, 16], [96, -0.2, 176, 18], [128, 0.04, 198, 20], [158, 0.22, 170, 18], [186, 0.46, 146, 16], [214, 0.7, 112, 13]];
+  arms.forEach(([x, ang, len, w], i) => tentacle(k, x, 226, ang, len, w, shade(p.body, i % 2 ? -0.12 : 0.05), i * 1.3, 30));
+  ellipse(k, 128, 212, 40, 28, shade(p.body, -0.05));
+  for (const x of [112, 144]) { ellipse(k, x, 205, 10, 7, p.eye, { emissive: true }); ellipse(k, x, 205, 2.4, 7, '#0a1410'); }                                  // pale eyes with slit pupils
+  poly(k, [[100, 192], [156, 192], [150, 197], [106, 197]], shade(p.body, -0.4), false, { flat: true });                                                // a heavy brow
+  poly(k, [[108, 222], [148, 222], [142, 232], [114, 232]], '#0a1410', false, { flat: true });
+  for (const x of [100, 128, 156]) for (let i = 1; i < 6; i++) circle(k, x + Math.sin(i * 1.2) * 6, 226 - i * 26, 3.2, shade(p.accent, 0.3));       // suckers
+  ellipse(k, 128, 236, 100, 10, shade(p.body, 0.25), { g: 'detail' });                                                                                    // the waterline over the arms' roots
 };
 
 const serpent: Painter = (k, p) => {
@@ -313,43 +402,55 @@ const guardian: Painter = (k, p) => {
   plate(k, 128, 124, 70, 56, shade(p.gear, 0.1));
   if (p.has('cape')) poly(k, [[160, 120], [196, 160], [190, 232], [160, 200]], shade(p.accent, -0.2), true);
   limb(k, 164, 128, 188, 170, 16, 13, p.gear); limb(k, 92, 128, 70, 166, 16, 13, p.gear);
-  if (p.has('sword')) weaponSword(k, 190, 176, 0.5, 1.0);
+  if (p.has('dwarf')) weaponAxe(k, 190, 178, 0.35, 0.95);
+  else if (p.has('sword')) weaponSword(k, 190, 176, 0.5, 1.0);
   else if (p.has('spear')) weaponSpear(k, 190, 180, 0.15, 1.0);
   else weaponSword(k, 190, 176, 0.45, 0.9, '#8a8f98');
   if (p.has('shield')) { poly(k, [[28, 146], [70, 136], [76, 190], [50, 214], [24, 190]], '#5a5e66', true); line(k, 50, 142, 50, 206, 3, shade('#5a5e66', 0.3)); }
   if (p.has('banner')) banner(k, 62, 190, 0.8, p.accent);
   if (p.has('robe')) poly(k, [[92, 190], [164, 190], [176, 240], [80, 240]], shade(p.body, -0.1), true);
   circle(k, 128, 90, 30, shade(p.body, 0.1));
+  if (p.has('dwarf')) { poly(k, [[98, 100], [158, 100], [154, 152], [128, 180], [102, 152]], '#b8a888', true, { grad: 0.6 }); for (const y of [118, 136, 154]) line(k, 110, y, 146, y, 2, '#8a7a62'); }   // a long braided beard
+  if (p.has('weeds')) for (let i = 0; i < 7; i++) pline(k, bez([92 + i * 12, 198], [88 + i * 12, 216], [98 + i * 12, 232], [92 + i * 12, 248]), 3, '#3f6a4a');
   if (p.has('helm')) { helm(k, 128, 84, 1.45, '#6a6e76'); poly(k, [[108, 90], [148, 90], [146, 100], [110, 100]], '#0a0a0e', false, { flat: true }); }
   else { ellipse(k, 118, 92, 8, 9, '#0a0a0e', { g: 'face' }); ellipse(k, 140, 92, 8, 9, '#0a0a0e', { g: 'face' }); }
   eye(k, 118, 92, 4, p.eye, 1); eye(k, 140, 92, 4, p.eye, -1);
 };
 
 const spider: Painter = (k, p) => {
+  const big = p.has('shelob');
+  if (big) for (const [x1, y1, x2, y2] of [[8, 8, 120, 130], [248, 8, 140, 130], [128, 0, 128, 118], [8, 124, 100, 152], [248, 124, 160, 152]]) line(k, x1, y1, x2, y2, 1.4, '#c8c8d8');   // her webs
   for (const side of [-1, 1]) for (let i = 0; i < 4; i++) {
     const b: Pt = [128 + side * 22, 150 + (i - 1.5) * 8], m: Pt = [128 + side * (70 + i * 6), 100 + i * 16], e: Pt = [128 + side * (96 + i * 12), 226];
     const pts: Pt[] = []; for (let t = 0; t <= 1.001; t += 0.125) { const u = 1 - t; pts.push([u * u * b[0] + 2 * u * t * m[0] + t * t * e[0], u * u * b[1] + 2 * u * t * m[1] + t * t * e[1]]); }
-    pline(k, pts, 6, shade(p.body, i % 2 ? -0.15 : 0), 3);
+    pline(k, pts, big ? 11 : 6, shade(p.body, i % 2 ? -0.15 : 0), big ? 5 : 3);
   }
   ellipse(k, 150, 160, 44, 38, p.body);
   for (let i = 0; i < 4; i++) circle(k, 140 + i * 12, 152 + (i % 2) * 14, 4, p.accent);
+  if (big) { ellipse(k, 170, 168, 30, 26, shade(p.body, -0.25)); for (let i = 0; i < 8; i++) circle(k, 148 + i * 9, 144 + (i % 3) * 15, 3.8, p.accent); poly(k, [[158, 160], [188, 160], [173, 178]], '#7a1a1a', false, { flat: true }); poly(k, [[164, 198], [182, 198], [173, 178]], '#7a1a1a', false, { flat: true}); }
   circle(k, 96, 150, 30, shade(p.body, 0.05));
   ([[84, 142], [96, 138], [108, 142], [90, 152], [102, 152], [96, 162]] as Pt[]).forEach(([x, y], i) => eye(k, x, y, i < 3 ? 4.5 : 3, p.eye, 0));
   for (const d of [-1, 1]) poly(k, [[96 + d * 6, 170], [96 + d * 10, 192], [96 + d * 2, 176]], '#e9e2c8', false, { flat: true });
+  if (big) for (const x of [88, 104]) circle(k, x, 200, 2.8, '#9be83a', { emissive: true });                                                      // venom
 };
 
 const drake: Painter = (k, p) => {
-  wing(k, 138, 118, 1.0, shade(p.accent, -0.1), 1, false);
-  tail(k, 192, 170, 1, p.body, 38);
-  limb(k, 100, 186, 92, 232, 24, 14, shade(p.body, -0.15)); limb(k, 166, 186, 172, 232, 24, 14, shade(p.body, -0.25));
-  ellipse(k, 138, 158, 58, 42, p.body);
-  poly(k, [[96, 168], [178, 168], [170, 198], [102, 198]], shade(p.accent, 0.1), true);
-  limb(k, 86, 138, 62, 104, 28, 22, p.body);
-  poly(k, [[34, 92], [74, 74], [96, 92], [88, 120], [44, 116]], p.body, true);
-  poly(k, [[34, 100], [18, 108], [32, 116]], shade(p.body, -0.2));
-  poly(k, [[70, 76], [60, 52], [82, 74]], p.accent); poly(k, [[84, 80], [82, 56], [96, 82]], p.accent);
-  eye(k, 62, 96, 5, p.eye, 1); fangs(k, 42, 116, 0.7);
-  if (p.has('horns')) horns(k, 76, 76, 0.7, '#d8d0b8');
+  wing(k, 122, 120, 1.55, shade(p.accent, -0.3), -1); wing(k, 152, 120, 1.55, shade(p.accent, -0.12), 1);                                                  // two leathery wings
+  pline(k, bez([190, 180], [238, 198], [252, 150], [238, 104]), 22, p.body, 5);                                                                           // a long lashing tail
+  for (const [x, y] of [[212, 190], [238, 176], [246, 140], [240, 110]]) poly(k, [[x - 5, y], [x, y - 12], [x + 5, y]], shade(p.accent, 0.1), false, { flat: true });
+  limb(k, 160, 190, 170, 234, 32, 16, shade(p.body, -0.2)); limb(k, 116, 192, 108, 234, 28, 14, shade(p.body, -0.1));
+  for (const x of [172, 110]) { ellipse(k, x, 236, 18, 6, '#201814'); for (const d of [-8, 0, 8]) poly(k, [[x + d - 2, 236], [x + d, 246], [x + d + 2, 236]], BONE, false, { flat: true }); }
+  ellipse(k, 142, 164, 64, 42, p.body);
+  poly(k, [[94, 176], [190, 176], [180, 208], [104, 208]], shade(p.accent, 0.1), true);                                                                     // belly plates
+  for (let i = 0; i < 5; i++) poly(k, [[104 + i * 18, 126], [112 + i * 18, 108 - (i % 2) * 6], [120 + i * 18, 126]], shade(p.accent, 0.05), false, { flat: true });   // a spined back
+  pline(k, bez([100, 156], [66, 156], [58, 112], [66, 82]), 32, p.body, 22);                                                                              // the neck
+  poly(k, [[30, 64], [74, 48], [102, 66], [94, 94], [46, 100]], p.body, true);                                                                            // head and snout
+  poly(k, [[34, 92], [14, 104], [36, 112], [84, 104]], shade(p.body, -0.25));                                                                             // lower jaw
+  poly(k, [[36, 94], [86, 94], [80, 104], [42, 104]], '#ffb040', false, { emissive: true });                                                              // fire in the maw
+  for (const x of [40, 52, 64, 76]) poly(k, [[x - 3, 94], [x, 104], [x + 3, 94]], BONE, false, { flat: true });
+  poly(k, [[74, 50], [94, 22], [98, 52]], shade(p.accent, 0.1)); poly(k, [[88, 56], [112, 32], [108, 64]], shade(p.accent, 0.05));                         // swept-back horns
+  slit(k, 66, 72, 8, p.eye, 1);
+  circle(k, 26, 76, 3, '#150d20');
 };
 
 const fiend: Painter = (k, p) => {
@@ -413,17 +514,26 @@ const horror: Painter = (k, p) => {
 };
 
 const balrog: Painter = (k, p) => {
-  wing(k, 100, 110, 1.45, shade(p.body, -0.1), -1); wing(k, 156, 110, 1.45, shade(p.body, -0.2), 1);
-  limb(k, 108, 188, 90, 238, 34, 24, p.body); limb(k, 150, 188, 168, 238, 34, 24, shade(p.body, -0.15));
-  ellipse(k, 128, 150, 52, 62, p.body);
-  for (let i = 0; i < 9; i++) poly(k, [[88 + i * 10, 150], [92 + i * 10, 110 - (i % 3) * 16], [100 + i * 10, 150]], i % 2 ? p.accent : p.eye, true, { emissive: true });
-  limb(k, 170, 112, 214, 156, 26, 18, p.body); limb(k, 86, 112, 44, 148, 26, 18, p.body);
-  xf(k, 218, 160, 0.35, () => poly(k, [[-9, 0], [9, 0], [12, -110], [0, -134], [-12, -110]], p.accent, false, { emissive: true }));
-  pline(k, bez([44, 150], [10, 130], [20, 80], [46, 56]), 5, p.accent);
-  circle(k, 128, 84, 34, p.body);
-  horns(k, 128, 60, 1.5, '#3a2a30');
-  eye(k, 114, 86, 6, p.eye, 1); eye(k, 142, 86, 6, p.eye, -1);
-  poly(k, [[110, 104], [146, 104], [140, 120], [116, 120]], '#1a0408', false, { flat: true });
+  const lesser = !p.has('whip');                                                                                                                          // the Herald is a lesser spirit: no whip, a shorter blade
+  wing(k, 96, 112, 1.65, shade(p.body, -0.1), -1); wing(k, 160, 112, 1.65, shade(p.body, -0.25), 1);
+  limb(k, 108, 186, 90, 236, 40, 26, p.body); limb(k, 150, 186, 168, 236, 40, 26, shade(p.body, -0.15));
+  for (const x of [88, 170]) poly(k, [[x - 22, 236], [x + 14, 236], [x + 18, 252], [x - 26, 252]], '#14080c');                                           // cloven hooves
+  for (const [x, y] of [[96, 212], [166, 206], [112, 232], [150, 230]]) poly(k, [[x - 6, y + 8], [x, y - 14], [x + 6, y + 8]], p.accent, false, { emissive: true });   // flames at the knees
+  poly(k, [[66, 114], [190, 114], [172, 200], [84, 200]], p.body, true, { grad: 0.6 });
+  for (const [x1, y1, x2, y2] of [[100, 140, 118, 176], [150, 136, 138, 182], [126, 150, 124, 196], [88, 128, 106, 152]]) line(k, x1, y1, x2, y2, 3.4, p.accent);   // cracks of fire
+  for (let i = 0; i < 11; i++) {                                                                                                                          // a mane of flame
+    const a = -Math.PI * 0.97 + i * ((Math.PI * 0.94) / 10), cx = 128 + Math.cos(a) * 44, cy = 98 + Math.sin(a) * 38;
+    poly(k, [[cx - 9, cy + 12], [cx + (i - 5) * 3, cy - 30 - (i % 3) * 12], [cx + 9, cy + 12]], i % 2 ? p.accent : p.eye, false, { emissive: true });
+  }
+  limb(k, 178, 120, 214, 152, 30, 20, p.body); limb(k, 78, 120, 44, 152, 30, 20, p.body);
+  xf(k, 216, 156, 0.3, () => { const s = lesser ? 0.75 : 1; poly(k, [[-11 * s, 0], [11 * s, 0], [14 * s, -118 * s], [0, -150 * s], [-14 * s, -118 * s]], p.accent, false, { emissive: true }); poly(k, [[-4, 0], [4, 0], [5, -110 * s], [0, -130 * s], [-5, -110 * s]], p.eye, false, { emissive: true }); });   // a sword of flame
+  if (!lesser) { pline(k, bez([44, 154], [6, 142], [14, 88], [48, 62]), 7, p.accent); pline(k, bez([48, 62], [64, 46], [40, 36], [30, 48]), 5, p.eye); }       // a whip of fire
+  ellipse(k, 128, 86, 30, 35, shade(p.body, 0.08));
+  horns(k, 128, 62, 1.7, '#2a1a20');
+  if (p.has('crown')) poly(k, [[104, 54], [112, 36], [120, 52], [128, 30], [136, 52], [144, 36], [152, 54]], '#d9b25f', false, { flat: true });
+  slit(k, 114, 86, 9, p.eye, 1); slit(k, 142, 86, 9, p.eye, -1);
+  poly(k, [[110, 102], [146, 102], [140, 120], [116, 120]], '#ffb040', false, { emissive: true });                                                        // a glowing maw
+  for (const x of [118, 128, 138]) poly(k, [[x - 3, 102], [x, 112], [x + 3, 102]], '#2a0a08', false, { flat: true });
 };
 
 const warden: Painter = (k, p) => {
@@ -455,6 +565,7 @@ const shadeF: Painter = (k, p) => {
   for (const x of [18, 30, 40]) line(k, 28, 168, x, 190, 3, '#d8d0e8'); for (const x of [216, 226, 238]) line(k, 226, 168, x, 190, 3, '#d8d0e8');
   eye(k, 114, 84, 6, p.eye, 1); eye(k, 142, 84, 6, p.eye, -1);
   if (p.has('horns')) horns(k, 128, 56, 1.2, '#2a2230');
+  if (p.has('crown')) poly(k, [[98, 44], [106, 22], [116, 40], [128, 16], [140, 40], [150, 22], [158, 44]], '#d8e8d0', false, { flat: true });
   if (p.has('helm')) helm(k, 128, 70, 1.2, '#3a3a4a');
   if (p.has('sword')) weaponSword(k, 232, 172, 0.3, 1.0, '#6a6a7a');
   if (p.has('cape')) poly(k, [[160, 100], [200, 140], [196, 230], [160, 190]], shade(p.accent, -0.3), true);
@@ -474,9 +585,12 @@ export function creatureImage(d: EnemyDef, n: number): PixImg {
     body: toHex(d.palette.body), accent: toHex(d.palette.accent), eye: toHex(d.palette.eye), gear: toHex(d.palette.gear),
     has: (f) => !!d.features?.includes(f), seed: [...d.id].reduce((a, ch) => a + ch.charCodeAt(0), 0),
   };
-  (d.features?.includes('rat') ? rat : PAINTERS[d.family])({ S, xf: null }, pal);
+  const has = (f: string): boolean => !!d.features?.includes(f);
+  (has('watcher') ? watcher : has('gollum') || has('creeper') ? gollum : has('rat') ? rat : PAINTERS[d.family])({ S, xf: null }, pal);
   const img = S.finish({ rim: true, contrast: 1.12 });
-  const fade = FADES[d.family];
+  const ghost = has('ghost');
+  const fade = FADES[d.family] ?? (ghost ? 0.64 : undefined);
+  if (ghost) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if ((x * 7 + y * 13) % 17 === 0) { const i = (y * n + x) * 4; img.rgba[i + 3] = 0; if (img.normal) img.normal[i + 3] = 0; }   // a little see-through
   if (fade !== undefined) {
     const y0 = Math.round(n * fade);
     for (let y = y0; y < n; y++) for (let x = 0; x < n; x++) {

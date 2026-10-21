@@ -3,7 +3,7 @@ import type { ChapterDef } from './schema.ts';
 export const CHAPTERS: ChapterDef[] = [
   {
     n: 1, name: 'The West-gate', floors: [1, 100], theme: 'gate',
-    blurb: 'Ruined halls and a broken gate. Goblins hold the ground floors. Every company starts somewhere.',
+    blurb: 'Ruined halls, a black pool and a broken gate. Goblins hold the ground floors, and something waits in the water. Every company starts somewhere.',
     palette: { sky: '#12161c', far: '#222a33', mid: '#33404c', near: '#1c232b', light: '#ffc86a', fog: '#4a5866' },
     normals: ['goblin-skirmisher', 'tunnel-rat', 'goblin-slinger', 'rotting-sentry'], minis: ['gate-lieutenant', 'warren-boss-grub'], elite: 'goblin-warchief', boss: 'gate-warden',
     unlocks: ['rules', 'armoury'], unlockText: 'Tutorial. Aragorn leads; Gimli joins on floor 5; Frodo is rescued on floor 10.',
@@ -12,7 +12,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 2, name: 'Echoing Galleries', floors: [101, 200], theme: 'gallery',
-    blurb: 'Vaulted galleries where every footstep comes back wrong. Bats fill the roof; archers fill the balconies.',
+    blurb: 'Vaulted galleries where every footstep comes back wrong. Bats fill the roof and black-fletched archers the balconies, and something pale follows at the edge of the light.',
     palette: { sky: '#101420', far: '#1e2638', mid: '#303c58', near: '#171d2c', light: '#9ac4ff', fog: '#48587a' },
     normals: ['cave-bat', 'gallery-archer', 'goblin-tunneler', 'hollow-echo'], minis: ['bat-matriarch', 'archer-sergeant'], elite: 'echo-stalker', boss: 'goblin-captain',
     unlocks: ['legolas'], unlockText: 'Legolas joins on floor 10 and his volleys change how rooms are cleared.',
@@ -21,7 +21,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 3, name: 'Abandoned Forges', floors: [201, 300], theme: 'forge',
-    blurb: 'Dead hearths, cold anvils and orcs in plate. Furnace vents roar without warning.',
+    blurb: 'Cold anvils, hot furnaces and orcs in plate. Chained trolls turn the bellows, and a pale war-chief has come for the dwarf-smiths’ iron.',
     palette: { sky: '#1a1210', far: '#3a2418', mid: '#5c3a22', near: '#2a1a12', light: '#ff8a2a', fog: '#6a4a38' },
     normals: ['slag-orc', 'furnace-imp', 'cinder-hound', 'anvil-golem'], minis: ['smelter-brute', 'bellows-witch'], elite: 'foundry-overseer', boss: 'forge-tyrant',
     hazard: { kind: 'furnace', every: 5, power: 6 },
@@ -31,7 +31,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 4, name: 'The Endless Stair', floors: [301, 400], theme: 'stair',
-    blurb: 'A stair that climbs and falls into the dark. Ambushes wait on every landing.',
+    blurb: 'A stair that climbs and falls into the dark. Wargs run its landings, Uruk-hai hold its turnings, and something far older spins in the deep.',
     palette: { sky: '#0e1218', far: '#1e262e', mid: '#2c3844', near: '#141a22', light: '#d0e0ff', fog: '#3e4c5c' },
     normals: ['stair-warg', 'ambush-goblin', 'chain-orc', 'climbing-spider'], minis: ['warg-hunter', 'banner-orc'], elite: 'packleader-warg', boss: 'stair-sentinel',
     hazard: { kind: 'ambush', every: 6, power: 1 },
@@ -41,7 +41,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 5, name: 'The Great Halls', floors: [401, 500], theme: 'halls',
-    blurb: 'Colossal pillars, a thousand sconces and the thump of drums. Trolls have the run of the place.',
+    blurb: 'Colossal pillars, a thousand sconces and the thump of drums in the deep. Trolls have the run of the place, and the drums are getting faster.',
     palette: { sky: '#14121a', far: '#2c2638', mid: '#463c58', near: '#1c1826', light: '#ffd890', fog: '#5a4e6a' },
     normals: ['hall-troll', 'drummer-orc', 'troll-whelp', 'pillar-breaker'], minis: ['drum-master', 'spear-troll'], elite: 'cave-troll', boss: 'cave-troll-chieftain',
     hazard: { kind: 'drums', every: 4, power: 6 },
@@ -51,7 +51,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 6, name: 'The Flooded Deeps', floors: [501, 600], theme: 'flooded',
-    blurb: 'Black water laps at ancient stairs. Pale things swim under the surface; the air tastes of poison.',
+    blurb: 'Black water laps at ancient stairs. The dead look up from beneath the surface and pale things swim between them; the air tastes of poison.',
     palette: { sky: '#0a1416', far: '#143036', mid: '#1f4a50', near: '#0c1c20', light: '#8affd0', fog: '#2a5a5e' },
     normals: ['deep-lurker', 'mire-spitter', 'drowned-dead', 'tentacle-spawn'], minis: ['pale-eel', 'bog-witch'], elite: 'bog-behemoth', boss: 'deepwater-horror',
     hazard: { kind: 'mist', every: 5, power: 3 },
@@ -61,7 +61,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 7, name: 'The Shadow Archives', floors: [601, 700], theme: 'archives',
-    blurb: 'Endless shelves of crumbling records, patrolled by things that guard what is written.',
+    blurb: 'The Chamber of Records, now a tomb. Barrow-wights drift between the shelves, black crows watch from the rafters, and the dwarf-dead still hold the door.',
     palette: { sky: '#12101c', far: '#241e3c', mid: '#3a3060', near: '#171328', light: '#c8b4ff', fog: '#4e4478' },
     normals: ['cursed-scribe', 'tome-guardian', 'ink-wisp', 'dust-revenant'], minis: ['archivist-shade', 'iron-librarian'], elite: 'scriptorium-lord', boss: 'keeper-of-records',
     hazard: { kind: 'shadowDrain', every: 4, power: 1 },
@@ -71,7 +71,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 8, name: 'The Black Chasm', floors: [701, 800], theme: 'chasm',
-    blurb: 'A rift into nothing, crossed by narrow bridges that do not always hold.',
+    blurb: 'A rift into nothing, crossed by narrow bridges that do not always hold. The Dead walk here, bound by an oath they broke long ago.',
     palette: { sky: '#06060c', far: '#12121e', mid: '#20202e', near: '#0a0a12', light: '#b484ff', fog: '#2e2e44' },
     normals: ['chasm-wraith', 'shade-crawler', 'gloom-bat', 'void-stalker'], minis: ['bridge-breaker', 'night-weaver'], elite: 'abyss-lurker', boss: 'chasm-stalker',
     hazard: { kind: 'crumble', every: 5, power: 9 },
@@ -81,7 +81,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 9, name: 'The Chamber of Flame', floors: [801, 900], theme: 'flame',
-    blurb: 'Rivers of fire beneath a vaulted dark. The heat is a wall; the light, a threat.',
+    blurb: 'Rivers of fire beneath a vaulted dark. The heat is a wall; the light, a threat. Fire-drakes, burnt Uruks and sparks of the old fire.',
     palette: { sky: '#1a0806', far: '#4a1a10', mid: '#7a2c16', near: '#2a0e08', light: '#ffa030', fog: '#8a3a22' },
     normals: ['ember-wisp', 'flame-imp', 'ashen-brute', 'magma-drake'], minis: ['cinder-knight', 'furnace-shaman'], elite: 'ember-wyrm', boss: 'flame-herald',
     hazard: { kind: 'emberRain', every: 4, power: 7 },
@@ -91,7 +91,7 @@ export const CHAPTERS: ChapterDef[] = [
   },
   {
     n: 10, name: 'The Bridge of Khazad-dûm', floors: [901, 1000], theme: 'bridge',
-    blurb: 'A single span over nothing. Behind you, the long dark. Ahead, the Balrog.',
+    blurb: 'A single span over nothing. A black rider waits at the far end, and behind him, the Balrog.',
     palette: { sky: '#0c0608', far: '#2a1218', mid: '#4a1e24', near: '#14080c', light: '#ff5a20', fog: '#5a2a30' },
     normals: ['bridge-guard', 'shadow-knight', 'flame-hound', 'hollow-captain'], minis: ['gatekeeper-knight', 'ash-priest'], elite: 'dread-champion', boss: 'balrog',
     hazard: { kind: 'crumble', every: 4, power: 12 },
