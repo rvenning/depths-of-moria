@@ -233,7 +233,7 @@ input[type='checkbox'] { accent-color: var(--gold); width: 1.2rem; height: 1.2re
 .tl-unit { --fc: var(--edge); width: 2.2rem; height: 2.2rem; overflow: hidden; background: #3a2f55; position: relative; flex: 0 0 auto; border-width: 3px; }
 .tl-unit.hero { --fc: #5a9ae8; } .tl-unit.enemy { --fc: #c0503f; }
 .tl-unit canvas { width: 100%; height: 100%; object-fit: contain; }
-.tl-unit.first { --fc: var(--gold2); transform: scale(1.2); }
+.tl-unit.first { --fc: var(--gold2); width: 2.64rem; height: 2.64rem; }   /* sized, not transform-scaled: Safari rasterises a scaled element at 1x and enlarges it, which blurred the next-up portrait */
 .hud-bottom { display: flex; gap: 0.5rem; align-items: stretch; padding: 0.4rem 0.7rem; background: var(--bg2); border-top: var(--px) solid var(--edge); flex-wrap: wrap; }
 .speed button.on { background: #d8a838; color: #2a1a04; text-shadow: none; }
 .logbox { --fc: var(--edge); height: 6.4rem; overflow-y: auto; font-size: 0.88rem; line-height: 1.3; padding: 0.4rem 0.6rem; background: var(--bg); flex: 1 1 22rem; }

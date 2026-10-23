@@ -155,6 +155,7 @@ export function iconImage(key: string, size = 48, color = '#ffffff'): Promise<HT
 // ------------------------------------------------------------------ pixel icons
 /** icons are boiled down to ICON_PX x ICON_PX native pixels and shown at an integer zoom */
 export const ICON_PX = 16;
+const MASK_ZOOM = 12;
 const pixCanvases = new Map<string, HTMLCanvasElement>();
 const pixUrls = new Map<string, string>();
 let pixReady: Promise<void> | null = null;
@@ -185,7 +186,11 @@ export function pixelIconUrl(key: string): string | undefined {
   const k = iconKey(key);
   const hit = pixUrls.get(k); if (hit) return hit;
   const cv = pixCanvases.get(k); if (!cv) return undefined;
-  const u = cv.toDataURL('image/png'); pixUrls.set(k, u); return u;
+  // Safari ignores image-rendering on CSS masks and smooths a 16px mask up to a retina size (a blurry top bar on iPad). Handing it the pixels pre-enlarged by a
+  // whole number (12x divides into 1:1 pixel blocks at 1x, 2x, 3x and 4x device pixel ratios, for 16 and 32 CSS px icons) leaves nothing to smooth.
+  const big = document.createElement('canvas'); big.width = big.height = ICON_PX * MASK_ZOOM;
+  const bx = ctx2d(big); bx.imageSmoothingEnabled = false; bx.drawImage(cv, 0, 0, big.width, big.height);
+  const u = big.toDataURL('image/png'); pixUrls.set(k, u); return u;
 }
 /** a coloured pixel icon with a dark outline, as an image (for Phaser textures) */
 export async function pixelIconImage(key: string, color: string): Promise<HTMLImageElement> {

@@ -106,3 +106,6 @@ Prompted by two field reports: a descent that never loaded the next floor (retre
 - [x] Service worker keeps the previous cache generation (an open page's lazy chunks vanished after a redeploy) and no longer answers a missing script with the HTML shell; a failed chunk import reloads the page once; an error boundary replaces blank screens.
 - Soak (`tools/soak.cjs`, auto-delve at 4×): 70 floors in 7 min, heap 45–75 MB, textures plateau ~290, 60 fps, 0 errors.
 - [~] Not provable: the exact cause of the user's stuck floor (the app was restarted); every plausible path above is closed.
+
+## iPad blur (2026-10-23, v1.2.2)
+- [~] Top bars looked blurry on iPad in combat. Two Safari-specific causes fixed (no iPad here, so not verified on the device): CSS-mask pixel icons were enlarged by Safari with smoothing (it ignores `image-rendering` on masks) — masks are now pre-enlarged 12× with nearest-neighbour so there is nothing to smooth; the next-up timeline portrait used `transform: scale(1.2)` (rasterised at 1× then enlarged) — now sized directly.
