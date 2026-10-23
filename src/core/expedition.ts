@@ -64,6 +64,15 @@ export function currentPlan(state: GameState): FloorPlan | null {
 interface ExpFlags { forceKind?: RoomKind; mode?: 'campaign' | 'endless' | 'ladder'; rung?: number; ladderPlan?: FloorPlan }
 const xf = (e: Expedition): Expedition & ExpFlags => e as Expedition & ExpFlags;
 
+/** the plan of a floor ahead of the current one (to prepare its room in idle time); null past the campaign's end or in a ladder */
+export function peekPlan(state: GameState, ahead = 1): FloorPlan | null {
+  const e = state.expedition;
+  if (!e || xf(e).mode === 'ladder') return null;
+  const f = e.floor + ahead;
+  if (!e.endless && f > MAX_CAMPAIGN_FLOOR) return null;
+  return planFloor(f, mixSeed(state.seed, e.attempt), e.party.length);
+}
+
 export function getPlan(state: GameState): FloorPlan | null {
   const e = state.expedition;
   if (!e) return null;

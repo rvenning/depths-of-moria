@@ -3,6 +3,7 @@ import { PIX, compositeBackground } from './backgrounds.ts';
 import { ditherLight } from './camp.ts';
 import { HERO_FOOT, HERO_H, HERO_W } from './heroes.ts';
 import { heroFrame } from './pixel/heroSprites.ts';
+import { ctx2d } from './draw.ts';
 
 /** where each cast member stands (left edge x, feet y in a 960x480 scene), by cast size */
 function seats(n: number): [number, number][] {
@@ -19,12 +20,12 @@ function seats(n: number): [number, number][] {
  */
 export function animateCast(cv: HTMLCanvasElement, chapter: number, cast: HeroId[], active: () => HeroId | null, reduced: boolean): () => void {
   cv.width = 960; cv.height = 480;
-  const ctx = cv.getContext('2d') as CanvasRenderingContext2D; ctx.imageSmoothingEnabled = false;
+  const ctx = ctx2d(cv); ctx.imageSmoothingEnabled = false;
   const base = compositeBackground(chapter, 'hall', 960, 480);
   const glow = ditherLight(90, '#ffb860');
   const pos = seats(cast.length);
   const tmp = document.createElement('canvas'); tmp.width = HERO_W; tmp.height = HERO_H;
-  const tx = tmp.getContext('2d') as CanvasRenderingContext2D; tx.imageSmoothingEnabled = false;
+  const tx = ctx2d(tmp); tx.imageSmoothingEnabled = false;
   const t0 = performance.now();
   const frame = (): void => {
     const t = reduced ? 0 : performance.now() - t0, who = active();

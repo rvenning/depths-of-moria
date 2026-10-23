@@ -8,9 +8,10 @@ export function makeCanvas(w: number, h: number): HTMLCanvasElement {
   c.height = Math.max(1, Math.round(h));
   return c;
 }
-export function ctx2d(c: HTMLCanvasElement): Ctx {
-  const x = c.getContext('2d');
-  if (!x) throw new Error('2D canvas unavailable');
+/** a 2D context, or a clear error: a browser short of canvas memory hands back null, which used to surface as "cannot read properties of null (reading 'drawImage')" far from the cause */
+export function ctx2d(c: HTMLCanvasElement, attrs?: CanvasRenderingContext2DSettings): Ctx {
+  const x = c.getContext('2d', attrs);
+  if (!x) throw new Error(`2D canvas unavailable (${c.width}x${c.height})`);
   return x;
 }
 

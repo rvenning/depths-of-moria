@@ -3,11 +3,12 @@ import { PIX, compositeBackground, paintBackground } from './backgrounds.ts';
 import { ditherLight } from './camp.ts';
 import { HERO_FOOT, HERO_H, HERO_W } from './heroes.ts';
 import { heroFrame } from './pixel/heroSprites.ts';
+import { ctx2d } from './draw.ts';
 
 /** the company at the gate: breathing heroes, torches that flicker on the stone, embers rising. Returns a stop function. */
 export function animateTitle(cv: HTMLCanvasElement, chapter: number, reduced: boolean): () => void {
   cv.width = 960; cv.height = 480;
-  const ctx = cv.getContext('2d') as CanvasRenderingContext2D; ctx.imageSmoothingEnabled = false;
+  const ctx = ctx2d(cv); ctx.imageSmoothingEnabled = false;
   const base = compositeBackground(chapter, 'arena', 960, 480);
   const lights = paintBackground(chapter, 'arena').lights.map((l) => ({ x: Math.round(l.x / PIX) * PIX, y: Math.round(l.y / PIX) * PIX, r: Math.max(24, Math.round(l.r / PIX / 2.4)), glow: ditherLight(Math.max(24, Math.round(l.r / PIX / 2.4)), l.color), flick: 0.6 + Math.random() * 1.2, ph: Math.random() * 100 }));
   const company: [HeroId, number, number, number][] = [['gandalf', 78, 452, 0], ['aragorn', 168, 466, 650], ['legolas', 748, 452, 1300], ['gimli', 672, 466, 1900], ['frodo', 770, 476, 400]];

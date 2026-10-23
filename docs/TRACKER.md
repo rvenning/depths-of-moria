@@ -93,3 +93,16 @@ The numbers come from a bot that plays each floor once and spends as it earns, s
 - [x] New art: a Watcher (seven arms from a pool), Gollum and his kin, wights, a Ringwraith, a crow, dwarf dead, Oathbreakers (fading ghosts), warg riders, chained and pillar-wielding trolls, Uruk sigils, a dragon-shaped drake, a rebuilt Balrog (flame mane, sword and whip of fire) with a lesser version for the Herald; orcs and goblins now have narrow slit eyes.
 - [x] The "Original" reskin maps every new name to a neutral one (e.g. Gollum to Skulker, Azog to Vorg, Shelob to the Great Weaver); the leak test covers the new terms.
 - Not done: the warg-and-rider pair is one sprite (the rider does not drop when the warg falls), and Gollum and Azog are not recurring villains across Ages (each appears once, in its chapter).
+
+## Stability and performance review (2026-10-23, v1.2.1)
+Prompted by two field reports: a descent that never loaded the next floor (retreat forced), and a laggy session after which every image failed until the app was restarted.
+- [x] Battle graphics recover from a lost WebGL context or a stalled render loop (stage rebuilt from the live fight, one notice); the Phaser game now releases its GL context on teardown. Checked with `tools/ctxloss.cjs`.
+- [x] The fight loop always reaches a result: an engine/UI exception resolves the rest of the battle instantly instead of stranding the floor; a stage that stops responding is skipped (15 s of visible time).
+- [x] `hitStop` could leave the scene at 5 % speed if the tab was hidden mid-hit; time scale is now always restored, and room set-up is guarded step by step so one bad hero/enemy cannot block the floor.
+- [x] Pixelised background sets are cached in a bounded LRU (8) keyed by source art, shared between hall/cavern/vault, and the next floor's room is built in idle time. The rendered-set cache was unbounded (potentially ~160 MB of canvases) and each floor change repeated the pixelise pass.
+- [x] Canvas creation failure now throws a clear error and retries once with empty caches (it surfaced as `reading 'drawImage'` of null).
+- [x] Status-icon rasterisation could never settle on a decode failure (stage init waited forever); failed decodes are no longer cached.
+- [x] Saves: one IndexedDB connection (a new one per read/write leaked), serialised/coalesced writes, retry before demoting to localStorage, a visible warning if nothing can store the game.
+- [x] Service worker keeps the previous cache generation (an open page's lazy chunks vanished after a redeploy) and no longer answers a missing script with the HTML shell; a failed chunk import reloads the page once; an error boundary replaces blank screens.
+- Soak (`tools/soak.cjs`, auto-delve at 4×): 70 floors in 7 min, heap 45–75 MB, textures plateau ~290, 60 fps, 0 errors.
+- [~] Not provable: the exact cause of the user's stuck floor (the app was restarted); every plausible path above is closed.

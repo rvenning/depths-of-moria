@@ -61,6 +61,7 @@ class Store {
 
   touch(): void { this.emit(); }
 
+  private lastSaveWarn = 0;
   scheduleSave(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => { void this.saveNow(); }, 1200);
@@ -68,8 +69,9 @@ class Store {
   async saveNow(): Promise<void> {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     if (!this.started) return;
-    await saveGame(this.state);
-    this.hasSave = true;
+    const ok = await saveGame(this.state);
+    this.hasSave = ok || this.hasSave;
+    if (!ok && Date.now() - this.lastSaveWarn > 60000) { this.lastSaveWarn = Date.now(); this.toast('Your progress could not be saved: the browser is blocking storage. Export a save from Settings.', 'warn'); }
   }
 
   go(screen: Screen, arg: string | null = null): void {

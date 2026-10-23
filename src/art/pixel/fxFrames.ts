@@ -1,3 +1,4 @@
+import { ctx2d } from '../draw.ts';
 // Pixel-art effect frames: pure canvas drawing with no Phaser, so the camp and the gallery can use them too.
 type Ctx = CanvasRenderingContext2D;
 export type FxKind = 'torch' | 'flame' | 'burst' | 'slash' | 'heal' | 'ice' | 'bolt' | 'aura' | 'shield' | 'smoke' | 'shadow' | 'poison' | 'rays' | 'impact';
@@ -7,7 +8,7 @@ export function mk(w: number, h: number, draw: (c: Ctx, f: number) => void, n: n
   const out: HTMLCanvasElement[] = [];
   for (let f = 0; f < n; f++) {
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    const c = cv.getContext('2d') as Ctx; c.imageSmoothingEnabled = false; draw(c, f); out.push(cv);
+    const c = ctx2d(cv); c.imageSmoothingEnabled = false; draw(c, f); out.push(cv);
   }
   return out;
 }

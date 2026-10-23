@@ -1,3 +1,4 @@
+import { ctx2d } from '../draw.ts';
 // Pixel-art engine. Shapes are drawn as masks, shaded by an "inflate" height field, mapped to hue-shifted
 // colour ramps with ordered dithering, then outlined (outer outline + selective inner outline).
 // Pure computation: no DOM, so the unit tests and Node tools can use it too.
@@ -230,7 +231,7 @@ export function normalFromImageData(src: Uint8ClampedArray, w: number, h: number
 
 export function toCanvas(img: PixImg, data: Uint8ClampedArray = img.rgba): HTMLCanvasElement {
   const cv = document.createElement('canvas'); cv.width = img.w; cv.height = img.h;
-  const x = cv.getContext('2d') as CanvasRenderingContext2D;
+  const x = ctx2d(cv);
   x.putImageData(new ImageData(new Uint8ClampedArray(data), img.w, img.h), 0, 0);
   return cv;
 }

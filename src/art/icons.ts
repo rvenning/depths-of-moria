@@ -1,3 +1,4 @@
+import { ctx2d } from './draw.ts';
 /**
  * Original line-icon set. Every icon is a 24×24 SVG fragment drawn with `currentColor`.
  * Used by React (inline <svg>) and by Phaser (rasterised through an Image).
@@ -146,6 +147,7 @@ export function iconImage(key: string, size = 48, color = '#ffffff'): Promise<HT
       img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconSvgString(key, size, color, 1.9))}`;
     });
     imgCache.set(id, p);
+    p.catch(() => { if (imgCache.get(id) === p) imgCache.delete(id); });   // a failed decode is retried next time, not remembered
   }
   return p;
 }
@@ -160,9 +162,9 @@ let pixReady: Promise<void> | null = null;
 async function rasterise(key: string): Promise<HTMLCanvasElement> {
   const svg = iconSvgString(key, 96, '#ffffff', 2.5);
   const img = new Image();
-  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error(`icon ${key}`)); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; });
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error(`icon ${key}`)); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; setTimeout(() => rej(new Error(`icon ${key} timed out`)), 5000); });
   const cv = document.createElement('canvas'); cv.width = ICON_PX; cv.height = ICON_PX;
-  const c = cv.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+  const c = ctx2d(cv, { willReadFrequently: true });
   c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
   c.drawImage(img, 1, 1, ICON_PX - 2, ICON_PX - 2);
   const d = c.getImageData(0, 0, ICON_PX, ICON_PX);
@@ -173,7 +175,9 @@ async function rasterise(key: string): Promise<HTMLCanvasElement> {
 
 /** rasterise every icon once (call before the first render; the UI falls back to the vector icon until then) */
 export function preloadPixelIcons(): Promise<void> {
-  pixReady ??= Promise.all(Object.keys(ICONS).map(async (k) => { try { pixCanvases.set(k, await rasterise(k)); } catch { /* keep the vector fallback */ } })).then(() => undefined);
+  pixReady ??= Promise.all(Object.keys(ICONS).map(async (k) => { try { pixCanvases.set(k, await rasterise(k)); } catch { /* keep the vector fallback */ } })).then(() => {
+    if (pixCanvases.size === 0) pixReady = null;                           // every icon failed (a transient decode problem): allow a later retry instead of remembering the failure
+  });
   return pixReady;
 }
 /** a white-on-transparent pixel icon as a data URL, for CSS masks (undefined until preloaded) */
@@ -188,12 +192,12 @@ export async function pixelIconImage(key: string, color: string): Promise<HTMLIm
   await preloadPixelIcons();
   const src = pixCanvases.get(iconKey(key)) ?? await rasterise(iconKey(key));
   const n = ICON_PX + 2, cv = document.createElement('canvas'); cv.width = n; cv.height = n;
-  const c = cv.getContext('2d') as CanvasRenderingContext2D;
-  const tint = (col: string): HTMLCanvasElement => { const t = document.createElement('canvas'); t.width = ICON_PX; t.height = ICON_PX; const x = t.getContext('2d') as CanvasRenderingContext2D; x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, ICON_PX, ICON_PX); return t; };
+  const c = ctx2d(cv);
+  const tint = (col: string): HTMLCanvasElement => { const t = document.createElement('canvas'); t.width = ICON_PX; t.height = ICON_PX; const x = ctx2d(t); x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, ICON_PX, ICON_PX); return t; };
   const dark = tint('#0b0714'), lit = tint(color);
   for (const [dx, dy] of [[0, 1], [2, 1], [1, 0], [1, 2]]) c.drawImage(dark, dx, dy);
   c.drawImage(lit, 1, 1);
   const img = new Image();
-  await new Promise<void>((res) => { img.onload = () => res(); img.src = cv.toDataURL('image/png'); });
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error(`status icon ${key}`)); img.src = cv.toDataURL('image/png'); });
   return img;
 }

@@ -112,7 +112,7 @@ function campBase(chapter: number): HTMLCanvasElement {
 export function ditherLight(radius: number, color = '#ff963c'): HTMLCanvasElement {
   const rgb = [parseInt(color.slice(1, 3), 16) || 255, parseInt(color.slice(3, 5), 16) || 150, parseInt(color.slice(5, 7), 16) || 60];
   const n = radius * 2, cv = document.createElement('canvas'); cv.width = n; cv.height = Math.round(n * 0.8);
-  const x = cv.getContext('2d') as CanvasRenderingContext2D; const img = x.createImageData(cv.width, cv.height);
+  const x = ctx2d(cv); const img = x.createImageData(cv.width, cv.height);
   const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   for (let y = 0; y < cv.height; y++) for (let px = 0; px < cv.width; px++) {
     const d = Math.hypot((px + 0.5 - radius) / radius, (y + 0.5 - radius * 0.8) / (radius * 0.8));
@@ -144,7 +144,7 @@ export interface CampController {
  */
 export function animateCamp(cv: HTMLCanvasElement, chapter: number, party: HeroId[], reduced: boolean, onNear?: (id: string | null) => void): CampController {
   cv.width = CAMP_W; cv.height = CAMP_H;
-  const ctx = cv.getContext('2d') as CanvasRenderingContext2D; ctx.imageSmoothingEnabled = false;
+  const ctx = ctx2d(cv); ctx.imageSmoothingEnabled = false;
   const base = campBase(chapter), flame = previewFrames('flame'), light = ditherLight(60);
   const fireX = Math.round((CAMP_W * 0.5) / PIX) * PIX, fireY = Math.round((CAMP_H * 0.7 + 78) / PIX) * PIX;
   const people = party.slice(0, 5).map((id, i) => ({ id, x: CAMP_W * CAMP_SEATS[i][0], y: CAMP_H * CAMP_SEATS[i][1], phase: (i * 677) % 1900, face: 1, walking: false }));

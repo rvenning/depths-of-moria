@@ -176,14 +176,18 @@ export class BattleScene extends Phaser.Scene {
     this.reduced = data.reduced;
     this.autoQuality = !!data.autoQuality;
     this.introDone = false;
-    this.setQuality(data.quality ?? 'hd');
-    for (const [k, img] of Object.entries(data.icons)) if (!this.textures.exists(k)) this.textures.addImage(k, img);
-    this.buildBackground(data.bg);
-    if (this.hd) this.lights.setAmbientColor(AMBIENT[data.bg.theme] ?? 0xc8c8e8);
-    for (const n of this.nodes.values()) { n.idle?.stop(); n.c.destroy(); }
+    this.restoreTime();
+    this.markerTween?.stop(); this.markerTween = undefined; this.marker?.setVisible(false);
+    this.cameras.main.setZoom(1);
+    // each step is guarded: a failure in one (a bad texture, a missing light) must not leave the floor without its units
+    const step = (what: string, fn: () => void): void => { try { fn(); } catch (e) { console.error(`battle scene: ${what} failed`, e); } };
+    step('quality', () => this.setQuality(data.quality ?? 'hd'));
+    step('icons', () => { for (const [k, img] of Object.entries(data.icons)) if (!this.textures.exists(k)) this.textures.addImage(k, img); });
+    step('background', () => { this.buildBackground(data.bg); if (this.hd) this.lights.setAmbientColor(AMBIENT[data.bg.theme] ?? 0xc8c8e8); });
+    step('clear', () => { for (const n of this.nodes.values()) { n.idle?.stop(); n.c.destroy(); } });
     this.nodes.clear(); this.lowSaid.clear();
-    for (const u of data.heroes) this.addUnit(u, false);
-    for (const u of data.enemies) this.addUnit(u, false);
+    for (const u of data.heroes) step(`hero ${u.id}`, () => this.addUnit(u, false));
+    for (const u of data.enemies) step(`enemy ${u.id}`, () => this.addUnit(u, false));
   }
 
   private introDone = false;
@@ -275,7 +279,7 @@ export class BattleScene extends Phaser.Scene {
   private buildBackground(bg: BgLayers): void {
     this.bakedBg = !!bg.baked;
     for (const l of this.layers) l.destroy();
-    const keep = new Set(['far', 'mid', 'floor', 'near'].map((n) => `bg:${bg.theme}:${bg.variant}:${n}`));
+    const keep = new Set(['far', 'mid', 'floor', 'near'].map((n) => `bg:${bg.key}:${n}`));
     for (const k of this.bgKeys) if (!keep.has(k) && this.textures.exists(k)) this.textures.remove(k);
     this.bgKeys = [...keep];
     for (const l of this.bgLights) l.img.destroy();
@@ -288,7 +292,7 @@ export class BattleScene extends Phaser.Scene {
     for (const e of this.emitters) e.destroy();
     this.layers = []; this.bgLights = []; this.emitters = [];
     const add = (name: string, cv: HTMLCanvasElement, depth: number) => {
-      const key = `bg:${bg.theme}:${bg.variant}:${name}`;
+      const key = `bg:${bg.key}:${name}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, cv);
       // the layer is BG_PAD native pixels larger on every side, so showing it at exactly ZOOM keeps every pixel square
       const img = this.add.image(STAGE_W / 2, STAGE_H / 2, key).setScale(ZOOM).setDepth(depth);
@@ -511,10 +515,18 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** a beat of frozen time on a critical hit, the way fighting games land a punch */
+  private hitStopTimer = 0;
   private hitStop(ms: number): void {
     if (this.reduced) return;
     this.tweens.timeScale = 0.05; this.time.timeScale = 0.05;
-    window.setTimeout(() => { if (this.sys?.isActive()) { this.tweens.timeScale = 1; this.time.timeScale = 1; } }, ms);
+    window.clearTimeout(this.hitStopTimer);
+    // restore unconditionally: it used to restore only while the scene was active, so a hit-stop that ended while the tab was hidden left every
+    // wait and tween running at 5% speed for good, which looked like a frozen fight
+    this.hitStopTimer = window.setTimeout(() => this.restoreTime(), ms);
+  }
+  private restoreTime(): void {
+    window.clearTimeout(this.hitStopTimer);
+    try { this.tweens.timeScale = 1; this.time.timeScale = 1; } catch { /* the scene is gone */ }
   }
 
   private flash(n: Node, color = 0xffffff): void {

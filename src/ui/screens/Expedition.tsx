@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { paintBackground } from '../../art/backgrounds.ts';
+import { paintBackground, prewarmBackground } from '../../art/backgrounds.ts';
 import { CHAPTER_BY_N } from '../../content/chapters.ts';
 import { ENEMIES } from '../../content/enemies.ts';
 import { EVENT_BY_ID } from '../../content/events.ts';
@@ -12,13 +12,13 @@ import { Battle, HAZARD_NAMES } from '../../core/battle/engine.ts';
 import { buildSetup } from '../../core/party.ts';
 import type { BEvent, BattleResult } from '../../core/battle/types.ts';
 import {
-  applyBattleResult, bankExpedition, chooseDoor, eventChoiceAvailable, getPlan, prepareBattle, quickResolve, resolveEvent, retreat,
+  applyBattleResult, bankExpedition, chooseDoor, eventChoiceAvailable, getPlan, peekPlan, prepareBattle, quickResolve, resolveEvent, retreat,
   takeRest, traversalSafe, type EventResult,
 } from '../../core/expedition.ts';
 import { CHALLENGE_INFO, type FloorPlan } from '../../core/floors.ts';
 import { itemName } from '../../core/loot.ts';
 import type { BattleSummary } from '../../core/state.ts';
-import { BattleStage, type StageApi } from '../BattleStage.tsx';
+import { BattleStage, type StageApi, type StageInit } from '../BattleStage.tsx';
 import { Bar, EnemyPortrait, HeroPortrait, Icon, Modal, StatusIcon, Tip, fmt, useHotkeys, ItemCell } from '../components.tsx';
 import { t } from '../names.ts';
 import { store, useGame } from '../store.ts';
@@ -83,6 +83,26 @@ export function ExpeditionScreen() {
   // background for the current floor
   const bg = useMemo(() => (plan ? paintBackground(plan.chapter, plan.bg, plan.floor) : null), [plan?.floor, plan?.chapter, plan?.bg, exp?.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the next floor's room is known in advance: build it while nothing else is happening, so the descent does not hitch
+  useEffect(() => {
+    if (!exp) return;
+    const next = peekPlan(store.state, 1);
+    if (next) prewarmBackground(next.chapter, next.bg);
+  }, [exp?.floor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the stage as it is right now, for rebuilding it if the graphics were lost mid-fight
+  const rebuild = useCallback((): StageInit | null => {
+    const cur = battleRef.current, p = getPlan(store.state);
+    if (!cur || !p) return null;
+    return { bg: paintBackground(p.chapter, p.bg, p.floor), heroes: cur.battle.views('hero'), enemies: cur.battle.views('enemy'), reduced: store.state.settings.reducedMotion, quality: stageQuality(store.state.settings.graphics), autoQuality: store.state.settings.graphics === 'auto' };
+  }, []);
+  const lastFault = useRef(0);
+  const onFault = useCallback((what: string) => {
+    if (Date.now() - lastFault.current < 15000) return;                   // one notice at a time
+    lastFault.current = Date.now();
+    store.toast(`${what} The fight carries on; Retreat is always available.`, 'warn');
+  }, []);
+
   // when the expedition state changes (new floor etc.), reset local phase
   const floorKey = exp ? `${exp.floor}:${exp.phase}:${exp.room}` : 'none';
   useEffect(() => {
@@ -140,15 +160,22 @@ export function ExpeditionScreen() {
     stage.current?.setSpeed(speedRef.current);
     await new Promise((r) => setTimeout(r, 120));
     let guard = 0;
-    while (!battle.over && my === runId.current && guard++ < 4000) {
-      if (pausedRef.current && !skipRef.current) { await new Promise((r) => setTimeout(r, 80)); continue; }
-      let evs: BEvent[];
-      if (skipRef.current) { const r = battle.run(); void r; evs = []; setHud(snapshot(battle)); break; }
-      evs = battle.step();
-      for (const e of evs) soundFor(e);
-      for (const e of evs) if (e.t === 'skill') pushLog(`${battle.unit(e.actor)?.name ?? '?'} uses ${e.name}${e.rule ? `  ·  ${e.rule}` : ''}`, battle.unit(e.actor)?.side === 'hero' ? 'h' : 'e');
-      await stage.current!.play(evs, speedRef.current);
-      setHud(snapshot(battle));
+    try {
+      while (!battle.over && my === runId.current && guard++ < 4000) {
+        if (pausedRef.current && !skipRef.current) { await new Promise((r) => setTimeout(r, 80)); continue; }
+        let evs: BEvent[];
+        if (skipRef.current) { const r = battle.run(); void r; evs = []; setHud(snapshot(battle)); break; }
+        evs = battle.step();
+        for (const e of evs) soundFor(e);
+        for (const e of evs) if (e.t === 'skill') pushLog(`${battle.unit(e.actor)?.name ?? '?'} uses ${e.name}${e.rule ? `  ·  ${e.rule}` : ''}`, battle.unit(e.actor)?.side === 'hero' ? 'h' : 'e');
+        await stage.current?.play(evs, speedRef.current);                   // never rejects; gives up on a stuck scene instead of hanging the fight
+        setHud(snapshot(battle));
+      }
+    } catch (err) {
+      // an engine or UI error mid-fight must not strand the player on a floor that never ends: resolve the rest of the battle instantly
+      console.error('battle loop failed', err);
+      pushLog('Something went wrong in this battle; resolving the rest.', 'w');
+      try { battle.run(); } catch (e2) { console.error('battle could not be resolved', e2); }
     }
     if (my !== runId.current) return;
     const res: BattleResult = battle.summary();
@@ -194,7 +221,7 @@ export function ExpeditionScreen() {
     <div className="exp">
       <div className="portrait-hint">Tip: rotate your device to landscape for a bigger battle view.</div>
       <div className="stage">
-        <BattleStage ref={stage} />
+        <BattleStage ref={stage} rebuild={rebuild} onFault={onFault} />
         <div className="hud-top">
           <div className="col gap-s" style={{ gap: 2 }}>
             <div className="row gap-s">

@@ -6,14 +6,25 @@ const STORE = 'saves';
 const KEY = 'main';
 const LS_KEY = 'depths-of-moria:save';
 
+/** one connection for the life of the page (opening one per read/write leaked connections, and a blocked open could stall every save) */
+let dbp: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  dbp ??= new Promise<IDBDatabase>((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB unavailable')); return; }
+    const timer = setTimeout(() => reject(new Error('IndexedDB open timed out')), 6000);
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      clearTimeout(timer);
+      const db = req.result;
+      db.onversionchange = () => { db.close(); dbp = null; };           // another tab upgrading, or the browser clearing site data
+      db.onclose = () => { dbp = null; };                               // the browser closed it behind our back
+      resolve(db);
+    };
+    req.onerror = () => { clearTimeout(timer); reject(req.error); };
   });
+  dbp.catch(() => { dbp = null; });                                      // a failed open is retried next time
+  return dbp;
 }
 
 async function idbGet(): Promise<unknown | null> {
@@ -32,6 +43,7 @@ async function idbPut(value: unknown): Promise<void> {
     tx.objectStore(STORE).put(value, KEY);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('save aborted'));
   });
 }
 
@@ -48,18 +60,33 @@ export async function loadGame(): Promise<GameState | null> {
   return migrate(raw);
 }
 
-export async function saveGame(state: GameState): Promise<void> {
-  const copy = JSON.parse(JSON.stringify(state)) as GameState;
-  if (backend === 'indexeddb') {
-    try { await idbPut(copy); return; } catch { backend = 'localstorage'; }
+const snapshot = (state: GameState): GameState => { try { return structuredClone(state); } catch { return JSON.parse(JSON.stringify(state)) as GameState; } };
+
+async function writeOnce(state: GameState): Promise<boolean> {
+  const copy = snapshot(state);
+  // indexeddb is tried every time (a transient failure must not demote the save to a lesser store for the rest of the session); one retry on a fresh connection
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { await idbPut(copy); backend = 'indexeddb'; return true; } catch { dbp = null; }
   }
-  if (backend === 'localstorage') {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(copy)); return; } catch { backend = 'none'; }
-  }
+  try { localStorage.setItem(LS_KEY, JSON.stringify(copy)); backend = 'localstorage'; return true; } catch { backend = 'none'; }
+  return false;
+}
+
+let writing: Promise<boolean> | null = null, latest: GameState | null = null, again = false;
+/** saves are written one at a time, and a burst collapses into one write of the newest state; resolves true when the data reached some store */
+export function saveGame(state: GameState): Promise<boolean> {
+  latest = state;
+  if (writing) { again = true; return writing; }
+  writing = (async () => {
+    let ok = true;
+    do { again = false; ok = await writeOnce(latest as GameState); } while (again);
+    return ok;
+  })().finally(() => { writing = null; });
+  return writing;
 }
 
 export async function deleteSave(): Promise<void> {
-  try { const db = await openDb(); await new Promise<void>((res) => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(KEY); tx.oncomplete = () => res(); tx.onerror = () => res(); }); } catch { /* ignore */ }
+  try { const db = await openDb(); await new Promise<void>((res) => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(KEY); tx.oncomplete = () => res(); tx.onerror = () => res(); tx.onabort = () => res(); }); } catch { /* ignore */ }
   try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
 }
 

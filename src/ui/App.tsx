@@ -1,4 +1,5 @@
 import { VersionBadge } from './VersionBadge.tsx';
+import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
 import './theme.css';
 import { audio, sfx } from '../audio/audio.ts';
@@ -126,6 +127,7 @@ export function App() {
             </nav>
           )}
           <main className={`main ${inExpedition ? 'fill' : ''}`} id="main">
+            <ErrorBoundary resetKey={screen} onLeave={() => st.go('camp')}>
             {screen === 'camp' && <CampScreen />}
             {screen === 'roster' && <RosterScreen />}
             {screen === 'party' && <PartyScreen />}
@@ -138,6 +140,7 @@ export function App() {
             {screen === 'settings' && <SettingsScreen />}
             {screen === 'about' && <AboutScreen />}
             {screen === 'expedition' && <Suspense fallback={<div className="center" style={{ padding: '3rem' }}><h3>Descending…</h3></div>}><ExpeditionScreen /></Suspense>}
+            </ErrorBoundary>
           </main>
         </div>
         </>

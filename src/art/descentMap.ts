@@ -1,6 +1,7 @@
 import { CHAPTERS } from '../content/chapters.ts';
 import { bayer, hash2 } from './pixel/engine.ts';
 import { compositeBackground } from './backgrounds.ts';
+import { ctx2d } from './draw.ts';
 
 /** the cutaway of the mountain, in native pixels (it is shown at 2x or more) */
 export const MAP_W = 224;
@@ -24,7 +25,7 @@ export function paintDescent(reach: number, current: number): HTMLCanvasElement 
   const key = `${reach}:${current}`;
   const hit = cache.get(key); if (hit) return hit;
   const cv = document.createElement('canvas'); cv.width = MAP_W; cv.height = MAP_H;
-  const c = cv.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D; c.imageSmoothingEnabled = false;
+  const c = ctx2d(cv, { willReadFrequently: true }); c.imageSmoothingEnabled = false;
   // --- strata first (as drawn images), then the pixel passes on top
   c.fillStyle = '#120d1d'; c.fillRect(0, 0, MAP_W, MAP_H);
   CHAPTERS.forEach((ch, i) => {

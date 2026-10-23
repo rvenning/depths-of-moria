@@ -1,6 +1,7 @@
 // Turns a painted canvas into pixel art: box-filter down to the native size, quantise colours into a small
 // hue-shifted palette with ordered dithering, drop stray pixels and (for sprites) add a clean 1px outline.
 import { OUTLINE, bayer, hexRGB, hsl2rgb, mixc, normalFromImageData, rgb2hsl, type RGB } from './engine.ts';
+import { ctx2d } from '../draw.ts';
 
 export interface PixelizeOpts {
   outW: number; outH: number;
@@ -23,7 +24,7 @@ const rot = (h: number, target: number, amt: number): number => { const d = ((ta
 export function pixelize(src: HTMLCanvasElement, o: PixelizeOpts): HTMLCanvasElement {
   const { outW, outH } = o;
   const small = document.createElement('canvas'); small.width = outW; small.height = outH;
-  const sx = small.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+  const sx = ctx2d(small, { willReadFrequently: true });
   sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = 'high';
   sx.drawImage(src, 0, 0, src.width, src.height, 0, 0, outW, outH);
   const img = sx.getImageData(0, 0, outW, outH), d = img.data;
@@ -74,7 +75,7 @@ export function pixelize(src: HTMLCanvasElement, o: PixelizeOpts): HTMLCanvasEle
 /** copy `cv` into a canvas `pad` pixels larger on every side, repeating the edge pixels */
 export function padCanvas(cv: HTMLCanvasElement, pad: number): HTMLCanvasElement {
   const o = document.createElement('canvas'); o.width = cv.width + pad * 2; o.height = cv.height + pad * 2;
-  const x = o.getContext('2d') as CanvasRenderingContext2D; x.imageSmoothingEnabled = false;
+  const x = ctx2d(o); x.imageSmoothingEnabled = false;
   x.drawImage(cv, pad, pad);
   x.drawImage(cv, 0, 0, 1, cv.height, 0, pad, pad, cv.height); x.drawImage(cv, cv.width - 1, 0, 1, cv.height, cv.width + pad, pad, pad, cv.height);
   x.drawImage(o, 0, pad, o.width, 1, 0, 0, o.width, pad); x.drawImage(o, 0, pad + cv.height - 1, o.width, 1, 0, pad + cv.height, o.width, pad);
@@ -83,20 +84,20 @@ export function padCanvas(cv: HTMLCanvasElement, pad: number): HTMLCanvasElement
 
 /** a normal map (as a canvas) derived from the brightness of a painted/pixelised canvas, for dynamic lighting */
 export function normalMapOf(cv: HTMLCanvasElement, strength = 1.6): HTMLCanvasElement {
-  const x = cv.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+  const x = ctx2d(cv, { willReadFrequently: true });
   const d = x.getImageData(0, 0, cv.width, cv.height);
   const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height;
-  (o.getContext('2d') as CanvasRenderingContext2D).putImageData(new ImageData(new Uint8ClampedArray(normalFromImageData(d.data, cv.width, cv.height, strength)), cv.width, cv.height), 0, 0);
+  (ctx2d(o)).putImageData(new ImageData(new Uint8ClampedArray(normalFromImageData(d.data, cv.width, cv.height, strength)), cv.width, cv.height), 0, 0);
   return o;
 }
 
 /** a blurred copy of a canvas (blur radius in native pixels). Uses the canvas filter where it exists, a down/up-sample otherwise. */
 function blurred(cv: HTMLCanvasElement, px: number): HTMLCanvasElement {
   const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height;
-  const x = o.getContext('2d') as CanvasRenderingContext2D;
+  const x = ctx2d(o);
   if (typeof (x as { filter?: string }).filter === 'string') { x.filter = `blur(${px}px)`; x.drawImage(cv, 0, 0); x.filter = 'none'; return o; }
   const k = Math.max(2, Math.round(px * 2)), s = document.createElement('canvas'); s.width = Math.ceil(cv.width / k); s.height = Math.ceil(cv.height / k);
-  const sx = s.getContext('2d') as CanvasRenderingContext2D; sx.imageSmoothingQuality = 'high'; sx.drawImage(cv, 0, 0, s.width, s.height);
+  const sx = ctx2d(s); sx.imageSmoothingQuality = 'high'; sx.drawImage(cv, 0, 0, s.width, s.height);
   x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; x.drawImage(s, 0, 0, cv.width, cv.height);
   return o;
 }
@@ -111,14 +112,14 @@ export function depthBlur(cv: HTMLCanvasElement, o: { all?: number; edge?: numbe
   const [top, bottom] = o.band ?? [0.28, 0.72];
   const soft = blurred(cv, o.edge);
   const m = document.createElement('canvas'); m.width = cv.width; m.height = cv.height;
-  const mx = m.getContext('2d') as CanvasRenderingContext2D;
+  const mx = ctx2d(m);
   mx.drawImage(soft, 0, 0);
   mx.globalCompositeOperation = 'destination-in';
   const g = mx.createLinearGradient(0, 0, 0, cv.height);
   g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(top, 'rgba(0,0,0,0)'); g.addColorStop(bottom, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,1)');
   mx.fillStyle = g; mx.fillRect(0, 0, cv.width, cv.height);
   const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height;
-  const ox = out.getContext('2d') as CanvasRenderingContext2D;
+  const ox = ctx2d(out);
   ox.drawImage(base, 0, 0); ox.drawImage(m, 0, 0);
   return out;
 }
@@ -126,7 +127,7 @@ export function depthBlur(cv: HTMLCanvasElement, o: { all?: number; edge?: numbe
 /** the same sprite breathing in: everything above `cut` (a fraction of the height) lifted `dy` pixels, the gap stitched */
 export function breathe(cv: HTMLCanvasElement, dy = 1, cut = 0.58): HTMLCanvasElement {
   const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height;
-  const x = o.getContext('2d') as CanvasRenderingContext2D; x.imageSmoothingEnabled = false;
+  const x = ctx2d(o); x.imageSmoothingEnabled = false;
   const y0 = Math.round(cv.height * cut);
   x.drawImage(cv, 0, y0, cv.width, cv.height - y0, 0, y0, cv.width, cv.height - y0);
   x.drawImage(cv, 0, 0, cv.width, y0, 0, -dy, cv.width, y0);
@@ -137,7 +138,7 @@ export function breathe(cv: HTMLCanvasElement, dy = 1, cut = 0.58): HTMLCanvasEl
 /** the sprite with everything above `cut` (a fraction of its height) shifted by (dx, dy): a wind-up, a lunge, a flinch */
 export function leanTop(cv: HTMLCanvasElement, dx: number, dy: number, cut = 0.55): HTMLCanvasElement {
   const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height;
-  const x = o.getContext('2d') as CanvasRenderingContext2D; x.imageSmoothingEnabled = false;
+  const x = ctx2d(o); x.imageSmoothingEnabled = false;
   const y0 = Math.round(cv.height * cut);
   x.drawImage(cv, 0, y0, cv.width, cv.height - y0, 0, y0, cv.width, cv.height - y0);
   x.drawImage(cv, 0, 0, cv.width, y0, dx, dy, cv.width, y0);
@@ -149,7 +150,7 @@ export function leanTop(cv: HTMLCanvasElement, dx: number, dy: number, cut = 0.5
 /** nearest-neighbour enlargement by an integer factor */
 export function upscale(cv: HTMLCanvasElement, k: number): HTMLCanvasElement {
   const o = document.createElement('canvas'); o.width = cv.width * k; o.height = cv.height * k;
-  const x = o.getContext('2d') as CanvasRenderingContext2D; x.imageSmoothingEnabled = false; x.drawImage(cv, 0, 0, o.width, o.height);
+  const x = ctx2d(o); x.imageSmoothingEnabled = false; x.drawImage(cv, 0, 0, o.width, o.height);
   return o;
 }
 export { hexRGB };

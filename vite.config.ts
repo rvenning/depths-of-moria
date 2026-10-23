@@ -38,15 +38,30 @@ const PRECACHE = ${JSON.stringify(all)};
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE))); });
 self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('dom-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // keep the generation just before this one: a page that was opened before an update still asks for its own (differently hashed) chunks, and deleting them made "the next level failed to load"
+  e.waitUntil(caches.keys().then(async (keys) => {
+    const old = keys.filter((k) => k.startsWith('dom-') && k !== CACHE);
+    const newest = (await Promise.all(old.map(async (k) => { const r = await (await caches.open(k)).match('./', { ignoreVary: true }); return [k, r ? Date.parse(r.headers.get('date') || '') || 0 : 0]; }))).sort((x, y) => y[1] - x[1])[0];
+    await Promise.all(old.filter((k) => !newest || k !== newest[0]).map((k) => caches.delete(k)));
+  }).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request; const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.endsWith('/version.json')) return;
-  e.respondWith(caches.open(CACHE).then((c) => c.match(req, { ignoreSearch: true })).then((hit) => hit || fetch(req).then((res) => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-    return res;
-  }).catch(() => caches.open(CACHE).then((c) => c.match('./')))));
+  e.respondWith((async () => {
+    const mine = await caches.open(CACHE);
+    const hit = await mine.match(req, { ignoreSearch: true, ignoreVary: true }) || await caches.match(req, { ignoreSearch: true, ignoreVary: true });   // this generation first, then the previous one
+    if (hit) return hit;
+    try {
+      const res = await fetch(req);
+      if (res.ok) { const copy = res.clone(); mine.put(req, copy).catch(() => {}); }
+      return res;
+    } catch (err) {
+      // offline: the app shell stands in for a page, but never for a script or image (an HTML body where a module was expected is a worse failure than a plain network error)
+      if (req.mode === 'navigate') { const shell = await mine.match('./', { ignoreVary: true }); if (shell) return shell; }
+      throw err;
+    }
+  })());
 });
 `;
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });

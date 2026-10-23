@@ -21,6 +21,8 @@ export interface BgLayers {
   particles: 'embers' | 'dust' | 'mist' | 'bubbles' | 'sparks' | 'motes';
   /** the layers carry their own baked lighting (a rendered room), so the scene lights only the sprites, not the backdrop */
   baked?: boolean;
+  /** identifies these exact layers (the source image, mirrored or not): the battle scene keys its textures by it, so room shapes that share a source share textures */
+  key: string;
 }
 
 interface Pal { sky: string; far: string; mid: string; near: string; light: string; fog: string }
@@ -280,20 +282,59 @@ export function paintBackgroundVector(chapter: number, variant: string, seed = 1
   (DRESS[ch.theme] ?? DRESS.gate)(fc, mc, nc, w, h, pal, variant, s, lights);
   paintFloor(flc, w, h, pal, ch.theme, s);
   const particles: BgLayers['particles'] = ({ gate: 'dust', gallery: 'dust', forge: 'embers', stair: 'dust', halls: 'motes', flooded: 'bubbles', archives: 'motes', chasm: 'sparks', flame: 'embers', bridge: 'embers' } as const)[ch.theme as 'gate'] ?? 'dust';
-  const layers: BgLayers = { far, mid, floor, near, lights, theme: ch.theme, variant, particles };
+  const layers: BgLayers = { far, mid, floor, near, lights, theme: ch.theme, variant, particles, key: `v:${chapter}:${variant}` };
   vcache.set(key, layers); vorder.push(key);
   while (vorder.length > 3) vcache.delete(vorder.shift() as string);
   return layers;
 }
 
 // ------------------------------------------------------------------ pixel version
+/**
+ * The pixelised layers of the rooms in use, least recently used first and bounded: each set is about 2 MB of canvases, and an unbounded
+ * cache (one per chapter x room shape, 80 in a full descent) used to grow past 150 MB in a long session. Keyed by the *source* image
+ * (hall, cavern and vault all use the same modelled hall), so shapes that look alike cost one set, not three.
+ */
 const pcache = new Map<string, BgLayers>();
-const porder: string[] = [];
+const PCACHE_MAX = 8;
+/** how many sets have been built and how long that took, for the soak test and the console */
+export const bgStats = { builds: 0, ms: 0, last: 0, cached: () => pcache.size };
+(globalThis as { __bgStats?: unknown }).__bgStats = bgStats;
+
+function sourceKey(chapter: number, variant: string): string {
+  const [srcVariant, flip] = RENDERED_SOURCE[variant] ?? [variant, false];
+  if (rendered.has(`${chapter}:${srcVariant}`)) return `r:${chapter}:${srcVariant}${flip ? ':m' : ''}`;
+  return `p:${chapter}:${variant}`;
+}
 
 export function paintBackground(chapter: number, variant: string, seed = 1): BgLayers {
-  const key = `${chapter}:${variant}`;
+  const key = sourceKey(chapter, variant);
   const hit = pcache.get(key);
-  if (hit) return hit;
+  if (hit) { pcache.delete(key); pcache.set(key, hit); return hit; }                                // touched: now the most recent
+  const t0 = performance.now();
+  let layers: BgLayers;
+  try { layers = buildBackground(chapter, variant, seed, key); } catch (err) {
+    // most likely the browser ran short of canvas memory: let go of every cached set and try once more
+    console.warn('background build failed, retrying with empty caches', err);
+    pcache.clear(); thumbs.clear();
+    layers = buildBackground(chapter, variant, seed, key);
+  }
+  bgStats.builds++; bgStats.last = performance.now() - t0; bgStats.ms += bgStats.last;
+  if (key[0] === 'r' || renderedDone) {
+    pcache.set(key, layers);
+    while (pcache.size > PCACHE_MAX) pcache.delete(pcache.keys().next().value as string);
+  }
+  return layers;
+}
+
+/** build a room's layers during idle time so the descent into it does not hitch (the next floor's room is known in advance) */
+export function prewarmBackground(chapter: number, variant: string): void {
+  if (pcache.has(sourceKey(chapter, variant))) return;
+  const run = (): void => { try { paintBackground(chapter, variant); } catch { /* it will be built when it is needed */ } };
+  const ric = (globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  if (ric) ric(run, { timeout: 4000 }); else setTimeout(run, 250);
+}
+
+function buildBackground(chapter: number, variant: string, seed: number, key: string): BgLayers {
   const nw = BG_W / PIX, nh = BG_H / PIX;
   const px = (cv: HTMLCanvasElement, o: { levels: number; dither: number; alphaDither?: boolean }): HTMLCanvasElement => padCanvas(pixelize(cv, { outW: nw, outH: nh, ...o }), BG_PAD);
   const [srcVariant, flip] = RENDERED_SOURCE[variant] ?? [variant, false];
@@ -302,27 +343,23 @@ export function paintBackground(chapter: number, variant: string, seed = 1): BgL
   if (rs) {
     // a modelled room: more tones than the painted ones (it carries real lighting), the same pixel grid, dither and depth of field
     const th = CHAPTER_BY_N(chapter).theme;
-    const layers: BgLayers = {
+    return {
       far: depthBlur(px(rs.far, { levels: 14, dither: 0.5 }), { all: 0.7, edge: 1.8 }),
       mid: depthBlur(px(rs.mid, { levels: 12, dither: 0.4, alphaDither: true }), { all: 0.3, edge: 1.6 }),
       floor: depthBlur(px(rs.floor, { levels: 14, dither: 0.5 }), { edge: 1.8, band: [0.22, 0.6] }),
       near: depthBlur(px(rs.near, { levels: 10, dither: 0.4, alphaDither: true }), { all: 1.4 }),
-      lights: rs.lights, theme: th, variant, particles: 'dust', baked: true,
+      lights: rs.lights, theme: th, variant, particles: 'dust', baked: true, key,
     };
-    pcache.set(key, layers); porder.push(key);
-    return layers;
   }
   const v = paintBackgroundVector(chapter, variant, seed);
-  const layers: BgLayers = {
+  return {
     // HD-2D depth of field: the far wall is soft, every layer defocuses toward the top and bottom edges, the foreground frame is blurred
     far: depthBlur(px(v.far, { levels: 9, dither: 0.9 }), { all: 1.3, edge: 2.6 }),
     mid: depthBlur(px(v.mid, { levels: 7, dither: 0.6, alphaDither: true }), { all: 0.4, edge: 2.2 }),
     floor: depthBlur(px(v.floor, { levels: 8, dither: 0.8 }), { edge: 2.4, band: [0.22, 0.6] }),
     near: depthBlur(px(v.near, { levels: 6, dither: 0.6, alphaDither: true }), { all: 1.4 }),
-    lights: v.lights, theme: v.theme, variant: v.variant, particles: v.particles,
+    lights: v.lights, theme: v.theme, variant: v.variant, particles: v.particles, key,
   };
-  if (renderedDone) { pcache.set(key, layers); porder.push(key); while (porder.length > 6) pcache.delete(porder.shift() as string); }
-  return layers;
 }
 
 // ------------------------------------------------------------------ rendered backdrops
@@ -372,6 +409,6 @@ export function compositeBackground(chapter: number, variant: string, w = 640, h
   const cv = makeCanvas(w, h); const c = ctx2d(cv);
   c.imageSmoothingEnabled = w < nw; c.imageSmoothingQuality = 'high';
   c.drawImage(nat, 0, 0, w, h);
-  if (renderedDone) thumbs.set(key, cv);
+  if (renderedDone) { thumbs.set(key, cv); while (thumbs.size > 48) thumbs.delete(thumbs.keys().next().value as string); }
   return cv;
 }
